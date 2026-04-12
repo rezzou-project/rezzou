@@ -1,0 +1,10 @@
+{
+  "extends": "@openally/config.typescript/esm-ts-next",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": [
+    "src/**/*"
+  ]
+}
