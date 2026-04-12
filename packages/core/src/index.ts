@@ -1,4 +1,6 @@
 export type {
+  Provider,
+  NamespaceType,
   Repo,
   FileContent,
   CommitAction,
