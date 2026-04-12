@@ -1,0 +1,32 @@
+{
+  "name": "rezzou",
+  "description": "Bulk maintenance operations across organizations/projects",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build:packages": "npm run build -w packages/core -w packages/providers -w packages/operations",
+    "dev": "npm run build:packages && npm run dev --workspace=apps/desktop",
+    "build": "npm run build:packages && npm run build --workspace=apps/desktop",
+    "test": "npm test -w packages/core -w packages/providers -w packages/operations",
+    "lint": "eslint apps/*/src packages/*/src",
+    "ci:publish": "changeset publish",
+    "ci:version": "changeset version",
+    "clean": "clear-ts-build"
+  },
+  "devDependencies": {
+    "@changesets/changelog-github": "^0.6.0",
+    "@changesets/cli": "^2.30.0",
+    "@openally/config.eslint": "2.4.2",
+    "@openally/config.typescript": "1.3.0",
+    "@types/node": "^25.6.0",
+    "typescript": "^6.0.2"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

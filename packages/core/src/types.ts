@@ -1,0 +1,57 @@
+export interface Repo {
+  id: string;
+  name: string;
+  fullPath: string;
+  defaultBranch: string;
+  url: string;
+}
+
+export interface FileContent {
+  content: string;
+  ref: string;
+}
+
+export interface CommitAction {
+  action: "create" | "update" | "delete";
+  path: string;
+  content: string;
+}
+
+export interface SubmitParams {
+  repoPath: string;
+  /** The branch to merge into and to branch off from (e.g. "main"). */
+  baseBranch: string;
+  /** The new branch to create with the changes (e.g. "rezzou/license-year-2026"). */
+  headBranch: string;
+  commitMessage: string;
+  prTitle: string;
+  prDescription: string;
+  files: CommitAction[];
+}
+
+export interface SubmitResult {
+  prUrl: string;
+  prTitle: string;
+}
+
+export interface ProviderAdapter {
+  listRepos(namespace: string): Promise<Repo[]>;
+  getFile(repoPath: string, filePath: string, branch: string): Promise<FileContent | null>;
+  submitChanges(params: SubmitParams): Promise<SubmitResult>;
+}
+
+export interface Operation {
+  readonly filePath: string;
+  readonly branchName: string;
+  readonly commitMessage: string;
+  readonly prTitle: string;
+  readonly prDescription: string;
+  apply(content: string): string | null;
+}
+
+export interface RepoDiff {
+  repo: Repo;
+  filePath: string;
+  original: string;
+  updated: string;
+}
