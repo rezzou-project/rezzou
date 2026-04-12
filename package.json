@@ -12,7 +12,7 @@
     "build:packages": "npm run build -w packages/core -w packages/providers -w packages/operations",
     "dev": "npm run build:packages && npm run dev --workspace=apps/desktop",
     "build": "npm run build:packages && npm run build --workspace=apps/desktop",
-    "test": "npm test -w packages/core -w packages/providers -w packages/operations",
+    "test": "npm test -w packages/core -w packages/providers -w packages/operations -w apps/desktop",
     "lint": "eslint apps/*/src packages/*/src",
     "ci:publish": "changeset publish",
     "ci:version": "changeset version",

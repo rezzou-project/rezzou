@@ -1,18 +1,16 @@
 // Import Third-party Dependencies
 import { create } from "zustand";
-
-// Import Internal Dependencies
-import { GitLabAdapter } from "@rezzou/providers";
-import { licenseYearOperation } from "@rezzou/operations";
-import {
-  scanRepos as engineScanRepos,
-  applyRepoDiff,
-  type ProviderAdapter,
-  type Repo,
-  type RepoDiff as BaseRepoDiff
-} from "@rezzou/core";
+import type { Repo, RepoDiff as BaseRepoDiff, SubmitResult } from "@rezzou/core";
 
 type Step = "connect" | "repos" | "diffs" | "results";
+
+function ipcErrorMessage(error: unknown, fallback: string): string {
+  if (!(error instanceof Error)) {
+    return fallback;
+  }
+
+  return error.message.replace(/^Error invoking remote method '[^']+': (?:\w+: )?/, "") || fallback;
+}
 
 export const applyStatus = {
   Pending: "pending",
@@ -30,7 +28,6 @@ export interface RepoDiff extends BaseRepoDiff {
 
 interface AppState {
   step: Step;
-  adapter: ProviderAdapter | null;
   groupPath: string;
   repos: Repo[];
   selectedRepoIds: string[];
@@ -52,7 +49,6 @@ interface AppActions {
 
 const kInitialState: AppState = {
   step: "connect",
-  adapter: null,
   groupPath: "",
   repos: [],
   selectedRepoIds: [],
@@ -69,12 +65,10 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
       set({ isLoading: true, error: null });
 
       try {
-        const adapter = new GitLabAdapter(token);
-        const repos = await adapter.listRepos(groupPath);
+        const repos = await window.api.connect(token, groupPath);
 
         set({
           step: "repos",
-          adapter,
           groupPath,
           repos,
           selectedRepoIds: repos.map((repo) => repo.id),
@@ -84,7 +78,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
       catch (connectError) {
         set({
           isLoading: false,
-          error: connectError instanceof Error ? connectError.message : "Failed to connect to GitLab"
+          error: ipcErrorMessage(connectError, "Failed to connect to GitLab")
         });
       }
     },
@@ -110,15 +104,12 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
     },
 
     scanRepos: async() => {
-      const { adapter, repos, selectedRepoIds } = get();
-      if (adapter === null) {
-        return;
-      }
+      const { repos, selectedRepoIds } = get();
 
       set({ isLoading: true, error: null });
 
       const selectedRepos = repos.filter((repo) => selectedRepoIds.includes(repo.id));
-      const baseDiffs = await engineScanRepos(adapter, selectedRepos, licenseYearOperation);
+      const baseDiffs = await window.api.scanRepos(selectedRepos);
       const diffs: RepoDiff[] = baseDiffs.map((diff) => {
         return {
           ...diff,
@@ -130,10 +121,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
     },
 
     applyDiff: async(repoPath: string) => {
-      const { adapter, diffs } = get();
-      if (adapter === null) {
-        return;
-      }
+      const { diffs } = get();
 
       const diffIndex = diffs.findIndex((diff) => diff.repo.fullPath === repoPath);
       if (diffIndex === -1) {
@@ -150,7 +138,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
       });
 
       try {
-        const result = await applyRepoDiff(adapter, diff, licenseYearOperation);
+        const result: SubmitResult = await window.api.applyDiff(diff);
 
         set((state) => {
           const updatedDiffs = [...state.diffs];
@@ -165,7 +153,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
           updatedDiffs[diffIndex] = {
             ...diff,
             applyStatus: applyStatus.Error,
-            error: applyError instanceof Error ? applyError.message : "Failed to create MR"
+            error: ipcErrorMessage(applyError, "Failed to create MR")
           };
 
           return { diffs: updatedDiffs };
