@@ -4,7 +4,7 @@ import * as fs from "node:fs";
 
 // Import Third-party Dependencies
 import { app, BrowserWindow, shell, ipcMain, safeStorage } from "electron";
-import type { Repo, RepoDiff } from "@rezzou/core";
+import type { Repo, RepoDiff, ProviderAdapter } from "@rezzou/core";
 
 // Import Internal Dependencies
 import { handleConnect, handleScanRepos, handleApplyDiff } from "./handlers.ts";
@@ -12,7 +12,7 @@ import { handleConnect, handleScanRepos, handleApplyDiff } from "./handlers.ts";
 // CONSTANTS
 const kCredentialsFile = "credentials.json";
 
-let currentToken: string | null = null;
+let currentAdapter: ProviderAdapter | null = null;
 
 function getCredentialsPath(): string {
   return path.join(app.getPath("userData"), kCredentialsFile);
@@ -52,28 +52,28 @@ function toError(err: unknown): never {
 
 app.whenReady().then(() => {
   ipcMain.handle("auth:connect", async(_event, token: string, groupPath: string): Promise<Repo[]> => {
-    const repos = await handleConnect(token, groupPath).catch(toError);
+    const { adapter, repos } = await handleConnect(token, groupPath).catch(toError);
 
-    currentToken = token;
+    currentAdapter = adapter;
     saveToken(token);
 
     return repos;
   });
 
   ipcMain.handle("engine:scanRepos", async(_event, repos: Repo[]): Promise<RepoDiff[]> => {
-    if (currentToken === null) {
+    if (currentAdapter === null) {
       throw new Error("Not connected");
     }
 
-    return handleScanRepos(currentToken, repos).catch(toError);
+    return handleScanRepos(currentAdapter, repos).catch(toError);
   });
 
   ipcMain.handle("engine:applyDiff", async(_event, diff: RepoDiff) => {
-    if (currentToken === null) {
+    if (currentAdapter === null) {
       throw new Error("Not connected");
     }
 
-    return handleApplyDiff(currentToken, diff).catch(toError);
+    return handleApplyDiff(currentAdapter, diff).catch(toError);
   });
 
   createWindow();
