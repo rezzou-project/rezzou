@@ -5,6 +5,15 @@ import type { NamespaceType, Repo, FileContent, SubmitParams, SubmitResult } fro
 // Import Internal Dependencies
 import { BaseProvider } from "./base.ts";
 
+// CONSTANTS
+const kCreateCommitMutation = `
+  mutation CreateCommit($input: CreateCommitOnBranchInput!) {
+    createCommitOnBranch(input: $input) {
+      commit { oid }
+    }
+  }
+`;
+
 export class GitHubAdapter extends BaseProvider {
   #client: InstanceType<typeof Octokit>;
   #namespaceType: NamespaceType;
@@ -76,37 +85,42 @@ export class GitHubAdapter extends BaseProvider {
       sha: baseBranch.commit.sha
     });
 
-    for (const file of params.files) {
-      let sha: string | undefined;
+    await this.#client.request("POST /graphql", {
+      query: kCreateCommitMutation,
+      variables: {
+        input: {
+          branch: {
+            repositoryNameWithOwner: params.repoPath,
+            branchName: params.headBranch
+          },
+          message: { headline: params.commitMessage },
+          fileChanges: {
+            additions: params.files.flatMap((file) => {
+              if (file.action === "delete") {
+                return [];
+              }
 
-      if (file.action !== "create") {
-        try {
-          const { data: existing } = await this.#client.repos.getContent({
-            owner,
-            repo,
-            path: file.path,
-            ref: params.headBranch
-          });
+              return [
+                {
+                  path: file.path,
+                  contents: Buffer.from(file.content).toString("base64")
+                }
+              ];
+            }),
+            deletions: params.files.flatMap((file) => {
+              if (file.action !== "delete") {
+                return [];
+              }
 
-          if (!Array.isArray(existing) && existing.type === "file") {
-            sha = existing.sha;
-          }
-        }
-        catch {
-          // file does not exist yet
+              return [
+                { path: file.path }
+              ];
+            })
+          },
+          expectedHeadOid: baseBranch.commit.sha
         }
       }
-
-      await this.#client.repos.createOrUpdateFileContents({
-        owner,
-        repo,
-        path: file.path,
-        message: params.commitMessage,
-        content: Buffer.from(file.content).toString("base64"),
-        branch: params.headBranch,
-        sha
-      });
-    }
+    });
 
     const { data: pr } = await this.#client.pulls.create({
       owner,
