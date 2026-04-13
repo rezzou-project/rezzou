@@ -1,6 +1,6 @@
 // Import Third-party Dependencies
 import { Octokit } from "@octokit/rest";
-import type { NamespaceType, Repo, FileContent, SubmitParams, SubmitResult } from "@rezzou/core";
+import type { NamespaceType, Repo, FileContent, SubmitParams, SubmitResult, Member } from "@rezzou/core";
 
 // Import Internal Dependencies
 import { BaseProvider } from "./base.ts";
@@ -131,9 +131,30 @@ export class GitHubAdapter extends BaseProvider {
       body: params.prDescription
     });
 
+    if (params.reviewers && params.reviewers.length > 0) {
+      await this.#client.pulls.requestReviewers({
+        owner,
+        repo,
+        pull_number: pr.number,
+        reviewers: params.reviewers
+      });
+    }
+
     return {
       prUrl: pr.html_url,
       prTitle: pr.title
     };
+  }
+
+  async listMembers(namespace: string): Promise<Member[]> {
+    if (this.#namespaceType !== "org") {
+      return [];
+    }
+
+    const { data } = await this.#client.orgs.listMembers({ org: namespace, per_page: 100 });
+
+    return data.map((user) => {
+      return { username: user.login, avatarUrl: user.avatar_url };
+    });
   }
 }

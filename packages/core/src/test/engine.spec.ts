@@ -22,6 +22,7 @@ const kOperation: Operation = {
   commitMessage: "chore: test",
   prTitle: "chore: test",
   prDescription: "test description",
+  reviewers: [],
   apply(content: string) {
     return `${content} updated`;
   }
@@ -173,6 +174,7 @@ describe("UT applyRepoDiff", () => {
       commitMessage: kOperation.commitMessage,
       prTitle: kOperation.prTitle,
       prDescription: kOperation.prDescription,
+      reviewers: [],
       files: [{ action: "update", path: diff.filePath, content: diff.updated }]
     });
     assert.deepEqual(result, kSubmitResult);

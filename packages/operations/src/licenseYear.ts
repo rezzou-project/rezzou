@@ -29,5 +29,6 @@ export const licenseYearOperation = {
   commitMessage: `chore: update license year to ${kCurrentYear}`,
   prTitle: `chore: update license year to ${kCurrentYear}`,
   prDescription: `Automated update of copyright year to ${kCurrentYear}, performed by Rezzou.`,
+  reviewers: [],
   apply: applyLicenseYear
 } satisfies Operation;

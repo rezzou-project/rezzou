@@ -10,7 +10,8 @@ import {
   type RepoDiff,
   type SubmitResult,
   type ProviderAdapter,
-  type OperationOverrides
+  type OperationOverrides,
+  type Member
 } from "@rezzou/core";
 
 interface ProviderOptions {
@@ -41,4 +42,11 @@ export async function handleApplyDiff(
   overrides: OperationOverrides
 ): Promise<SubmitResult> {
   return applyRepoDiff(adapter, diff, { ...licenseYearOperation, ...overrides });
+}
+
+export async function handleFetchMembers(
+  adapter: ProviderAdapter,
+  namespace: string
+): Promise<Member[]> {
+  return adapter.listMembers(namespace);
 }

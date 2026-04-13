@@ -1,4 +1,4 @@
-import type { Repo, RepoDiff, SubmitResult, Provider, NamespaceType, OperationOverrides } from "@rezzou/core";
+import type { Repo, RepoDiff, SubmitResult, Provider, NamespaceType, OperationOverrides, Member } from "@rezzou/core";
 
 declare global {
   interface Window {
@@ -6,6 +6,7 @@ declare global {
       connect(token: string, groupPath: string, options: { provider: Provider; namespaceType: NamespaceType }): Promise<Repo[]>;
       scanRepos(repos: Repo[]): Promise<RepoDiff[]>;
       applyDiff(diff: RepoDiff, overrides: OperationOverrides): Promise<SubmitResult>;
+      fetchMembers(namespace: string): Promise<Member[]>;
     };
   }
 }

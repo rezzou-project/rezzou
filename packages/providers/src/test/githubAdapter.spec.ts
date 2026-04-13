@@ -28,6 +28,11 @@ const mockPullsCreate = mock.fn(async() => {
   return { data: { html_url: "", title: "" } };
 });
 
+const mockRequestReviewers = mock.fn(async() => void 0);
+const mockListOrgMembers = mock.fn(async() => {
+  return { data: [] as unknown[] };
+});
+
 mock.module("@octokit/rest", {
   namedExports: {
     Octokit: mock.fn(function MockOctokit() {
@@ -43,7 +48,11 @@ mock.module("@octokit/rest", {
         },
         request: mockRequest,
         pulls: {
-          create: mockPullsCreate
+          create: mockPullsCreate,
+          requestReviewers: mockRequestReviewers
+        },
+        orgs: {
+          listMembers: mockListOrgMembers
         }
       };
     })
@@ -61,6 +70,8 @@ describe("GitHubAdapter", () => {
     mockCreateRef.mock.resetCalls();
     mockRequest.mock.resetCalls();
     mockPullsCreate.mock.resetCalls();
+    mockRequestReviewers.mock.resetCalls();
+    mockListOrgMembers.mock.resetCalls();
   });
 
   describe("listRepos", () => {
@@ -231,6 +242,7 @@ describe("GitHubAdapter", () => {
       mockPullsCreate.mock.mockImplementation(async() => {
         return {
           data: {
+            number: 1,
             html_url: "https://github.com/owner/repo/pull/1",
             title: "chore: update license year"
           }
@@ -301,6 +313,71 @@ describe("GitHubAdapter", () => {
           body: "Automated update"
         }
       ]);
+    });
+
+    it("should request reviewers when reviewers are provided", async() => {
+      const adapter = new GitHubAdapter(kToken, "org");
+      await adapter.submitChanges({ ...kParams, reviewers: ["john", "bob"] });
+
+      assert.equal(mockRequestReviewers.mock.callCount(), 1);
+      assert.deepEqual(mockRequestReviewers.mock.calls[0].arguments, [
+        {
+          owner: "owner",
+          repo: "repo",
+          pull_number: 1,
+          reviewers: ["john", "bob"]
+        }
+      ]);
+    });
+
+    it("should not request reviewers when reviewers is empty", async() => {
+      const adapter = new GitHubAdapter(kToken, "org");
+      await adapter.submitChanges({ ...kParams, reviewers: [] });
+
+      assert.equal(mockRequestReviewers.mock.callCount(), 0);
+    });
+  });
+
+  describe("listMembers", () => {
+    it("should return mapped org members", async() => {
+      mockListOrgMembers.mock.mockImplementation(async() => {
+        return {
+          data: [
+            { login: "john", avatar_url: "https://avatars.githubusercontent.com/u/1" },
+            { login: "bob", avatar_url: "https://avatars.githubusercontent.com/u/2" }
+          ]
+        };
+      });
+
+      const adapter = new GitHubAdapter(kToken, "org");
+      const result = await adapter.listMembers("my-org");
+
+      assert.deepEqual(result, [
+        { username: "john", avatarUrl: "https://avatars.githubusercontent.com/u/1" },
+        { username: "bob", avatarUrl: "https://avatars.githubusercontent.com/u/2" }
+      ]);
+    });
+
+    it("should call listMembers with namespace and pagination options", async() => {
+      mockListOrgMembers.mock.mockImplementation(async() => {
+        return { data: [] };
+      });
+
+      const adapter = new GitHubAdapter(kToken, "org");
+      await adapter.listMembers("my-org");
+
+      assert.equal(mockListOrgMembers.mock.callCount(), 1);
+      assert.deepEqual(mockListOrgMembers.mock.calls[0].arguments, [
+        { org: "my-org", per_page: 100 }
+      ]);
+    });
+
+    it("should return empty array for user namespace", async() => {
+      const adapter = new GitHubAdapter(kToken, "user");
+      const result = await adapter.listMembers("john");
+
+      assert.deepEqual(result, []);
+      assert.equal(mockListOrgMembers.mock.callCount(), 0);
     });
   });
 });

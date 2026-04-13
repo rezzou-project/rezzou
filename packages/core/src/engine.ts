@@ -42,6 +42,7 @@ export async function applyRepoDiff(
     commitMessage: operation.commitMessage,
     prTitle: operation.prTitle,
     prDescription: operation.prDescription,
+    reviewers: operation.reviewers,
     files: [{ action: "update", path: diff.filePath, content: diff.updated }]
   });
 }
