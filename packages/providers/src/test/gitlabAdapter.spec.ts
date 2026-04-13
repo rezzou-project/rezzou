@@ -16,17 +16,21 @@ const mockMrCreate = mock.fn(async() => {
 });
 
 const mockUsersAll = mock.fn(async() => ([] as unknown[]));
+const mockShowCurrentUser = mock.fn(async() => {
+  return { id: 1, username: "testuser", name: "Test User" };
+});
 const mockGroupMembersAll = mock.fn(async() => ([] as unknown[]));
+const mockGroupsAll = mock.fn(async() => ([] as unknown[]));
 
 mock.module("@gitbeaker/rest", {
   namedExports: {
     Gitlab: mock.fn(function MockGitlab() {
       return {
-        Groups: { allProjects: mockAllProjects },
+        Groups: { allProjects: mockAllProjects, all: mockGroupsAll },
         RepositoryFiles: { show: mockShow },
         Commits: { create: mockCommitsCreate },
         MergeRequests: { create: mockMrCreate },
-        Users: { all: mockUsersAll },
+        Users: { all: mockUsersAll, showCurrentUser: mockShowCurrentUser },
         GroupMembers: { all: mockGroupMembersAll }
       };
     })
@@ -42,7 +46,64 @@ describe("GitLabAdapter", () => {
     mockCommitsCreate.mock.resetCalls();
     mockMrCreate.mock.resetCalls();
     mockUsersAll.mock.resetCalls();
+    mockShowCurrentUser.mock.resetCalls();
     mockGroupMembersAll.mock.resetCalls();
+    mockGroupsAll.mock.resetCalls();
+  });
+
+  describe("listNamespaces", () => {
+    it("should return the authenticated user as a user namespace", async() => {
+      mockShowCurrentUser.mock.mockImplementation(async() => {
+        return { id: 42, username: "john", name: "John Doe" };
+      });
+      mockGroupsAll.mock.mockImplementation(async() => []);
+
+      const adapter = new GitLabAdapter(kToken);
+      const result = await adapter.listNamespaces();
+
+      assert.equal(result.length, 1);
+      assert.deepEqual(result[0], {
+        id: "42",
+        name: "john",
+        displayName: "John Doe",
+        type: "user"
+      });
+    });
+
+    it("should return group namespaces alongside the user namespace", async() => {
+      mockShowCurrentUser.mock.mockImplementation(async() => {
+        return { id: 1, username: "john", name: "John" };
+      });
+      mockGroupsAll.mock.mockImplementation(async() => [
+        { id: 10, full_path: "my-org", name: "My Org" },
+        { id: 11, full_path: "my-org/sub-group", name: "Sub Group" }
+      ]);
+
+      const adapter = new GitLabAdapter(kToken);
+      const result = await adapter.listNamespaces();
+
+      assert.equal(result.length, 3);
+      assert.equal(result[0].type, "user");
+      assert.equal(result[1].type, "org");
+      assert.equal(result[1].name, "my-org");
+      assert.equal(result[1].displayName, "My Org");
+      assert.equal(result[2].name, "my-org/sub-group");
+    });
+
+    it("should call Groups.all with minAccessLevel and pagination options", async() => {
+      mockShowCurrentUser.mock.mockImplementation(async() => {
+        return { id: 1, username: "john", name: "John" };
+      });
+      mockGroupsAll.mock.mockImplementation(async() => []);
+
+      const adapter = new GitLabAdapter(kToken);
+      await adapter.listNamespaces();
+
+      assert.equal(mockGroupsAll.mock.callCount(), 1);
+      assert.deepEqual(mockGroupsAll.mock.calls[0].arguments, [
+        { minAccessLevel: 20, perPage: 100 }
+      ]);
+    });
   });
 
   describe("listRepos", () => {

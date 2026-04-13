@@ -1,5 +1,7 @@
 export type {
   ProviderAdapter,
+  Namespace,
+  NamespaceType,
   Repo,
   FileContent,
   CommitAction,

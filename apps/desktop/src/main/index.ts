@@ -4,16 +4,14 @@ import * as fs from "node:fs";
 
 // Import Third-party Dependencies
 import { app, BrowserWindow, shell, ipcMain, safeStorage } from "electron";
-import type { Repo, RepoDiff, ProviderAdapter, Provider, NamespaceType, OperationOverrides } from "@rezzou/core";
+import type { Repo, RepoDiff, ProviderAdapter, Provider, OperationOverrides, Namespace } from "@rezzou/core";
 
 // Import Internal Dependencies
-import { handleConnect, handleScanRepos, handleApplyDiff, handleFetchMembers } from "./handlers.ts";
+import { handleAuthenticate, handleLoadRepos, handleScanRepos, handleApplyDiff, handleFetchMembers } from "./handlers.ts";
 
-interface ConnectOptions {
+interface AuthenticateOptions {
   token: string;
-  groupPath: string;
   provider: Provider;
-  namespaceType: NamespaceType;
 }
 
 // CONSTANTS
@@ -58,20 +56,23 @@ function toError(err: unknown): never {
 }
 
 app.whenReady().then(() => {
-  ipcMain.handle("auth:connect", async(_event, options: ConnectOptions): Promise<Repo[]> => {
-    const {
-      token,
-      groupPath,
-      provider,
-      namespaceType
-    } = options;
+  ipcMain.handle("auth:authenticate", async(_event, options: AuthenticateOptions): Promise<Namespace[]> => {
+    const { token, provider } = options;
 
-    const { adapter, repos } = await handleConnect(token, groupPath, { provider, namespaceType }).catch(toError);
+    const { adapter, namespaces } = await handleAuthenticate(token, provider).catch(toError);
 
     currentAdapter = adapter;
     saveToken(token);
 
-    return repos;
+    return namespaces;
+  });
+
+  ipcMain.handle("auth:loadRepos", async(_event, namespace: string): Promise<Repo[]> => {
+    if (currentAdapter === null) {
+      throw new Error("Not connected");
+    }
+
+    return handleLoadRepos(currentAdapter, namespace).catch(toError);
   });
 
   ipcMain.handle("engine:scanRepos", async(_event, repos: Repo[]): Promise<RepoDiff[]> => {

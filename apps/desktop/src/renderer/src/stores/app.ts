@@ -1,6 +1,6 @@
 // Import Third-party Dependencies
 import { create } from "zustand";
-import type { Provider, NamespaceType, Repo, RepoDiff as BaseRepoDiff, SubmitResult, OperationOverrides } from "@rezzou/core";
+import type { Provider, Namespace, Repo, RepoDiff as BaseRepoDiff, SubmitResult, OperationOverrides } from "@rezzou/core";
 
 // Import Internal Dependencies
 import { licenseYearOperation } from "@rezzou/operations";
@@ -32,8 +32,8 @@ export interface RepoDiff extends BaseRepoDiff {
 interface AppState {
   step: Step;
   provider: Provider;
-  namespaceType: NamespaceType;
-  groupPath: string;
+  namespaces: Namespace[];
+  selectedNamespace: Namespace | null;
   repos: Repo[];
   selectedRepoIds: string[];
   diffs: RepoDiff[];
@@ -43,7 +43,8 @@ interface AppState {
 }
 
 interface AppActions {
-  connect: (token: string, groupPath: string, options: { provider: Provider; namespaceType: NamespaceType; }) => Promise<void>;
+  authenticate: (token: string, provider: Provider) => Promise<void>;
+  loadRepos: (namespace: Namespace) => Promise<void>;
   toggleRepo: (id: string) => void;
   selectAll: () => void;
   deselectAll: () => void;
@@ -57,8 +58,8 @@ interface AppActions {
 const kInitialState: AppState = {
   step: "connect",
   provider: "gitlab",
-  namespaceType: "org",
-  groupPath: "",
+  namespaces: [],
+  selectedNamespace: null,
   repos: [],
   selectedRepoIds: [],
   diffs: [],
@@ -77,26 +78,40 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
   return {
     ...kInitialState,
 
-    connect: async(token: string, groupPath: string, options: { provider: Provider; namespaceType: NamespaceType; }) => {
+    authenticate: async(token: string, provider: Provider) => {
       set({ isLoading: true, error: null });
 
       try {
-        const repos = await window.api.connect(token, groupPath, options);
+        const namespaces = await window.api.authenticate(token, provider);
+
+        set({ provider, namespaces, isLoading: false });
+      }
+      catch (authenticateError) {
+        set({
+          isLoading: false,
+          error: ipcErrorMessage(authenticateError, "Failed to connect")
+        });
+      }
+    },
+
+    loadRepos: async(namespace: Namespace) => {
+      set({ isLoading: true, error: null });
+
+      try {
+        const repos = await window.api.loadRepos(namespace.name);
 
         set({
           step: "repos",
-          provider: options.provider,
-          namespaceType: options.namespaceType,
-          groupPath,
+          selectedNamespace: namespace,
           repos,
           selectedRepoIds: repos.map((repo) => repo.id),
           isLoading: false
         });
       }
-      catch (connectError) {
+      catch (loadReposError) {
         set({
           isLoading: false,
-          error: ipcErrorMessage(connectError, "Failed to connect")
+          error: ipcErrorMessage(loadReposError, "Failed to load repositories")
         });
       }
     },

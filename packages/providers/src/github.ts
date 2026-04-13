@@ -1,6 +1,6 @@
 // Import Third-party Dependencies
 import { Octokit } from "@octokit/rest";
-import type { NamespaceType, Repo, FileContent, SubmitParams, SubmitResult, Member } from "@rezzou/core";
+import type { NamespaceType, Namespace, Repo, FileContent, SubmitParams, SubmitResult, Member } from "@rezzou/core";
 
 // Import Internal Dependencies
 import { BaseProvider } from "./base.ts";
@@ -16,16 +16,40 @@ const kCreateCommitMutation = `
 
 export class GitHubAdapter extends BaseProvider {
   #client: InstanceType<typeof Octokit>;
-  #namespaceType: NamespaceType;
+  #namespaces = new Map<string, NamespaceType>();
 
-  constructor(token: string, namespaceType: NamespaceType) {
+  constructor(token: string) {
     super();
     this.#client = new Octokit({ auth: token });
-    this.#namespaceType = namespaceType;
+  }
+
+  async listNamespaces(): Promise<Namespace[]> {
+    const [{ data: user }, { data: orgs }] = await Promise.all([
+      this.#client.users.getAuthenticated(),
+      this.#client.orgs.listForAuthenticatedUser({ per_page: 100 })
+    ]);
+
+    const namespaces: Namespace[] = [
+      { id: user.login, name: user.login, displayName: user.name ?? user.login, type: "user" },
+      ...orgs.map((org) => {
+        return {
+          id: org.login,
+          name: org.login,
+          displayName: org.login,
+          type: "org" as NamespaceType
+        };
+      })
+    ];
+
+    this.#namespaces = new Map(namespaces.map((ns) => [ns.name, ns.type]));
+
+    return namespaces;
   }
 
   async listRepos(namespace: string): Promise<Repo[]> {
-    const data = this.#namespaceType === "org"
+    const namespaceType = this.#namespaces.get(namespace) ?? "org";
+
+    const data = namespaceType === "org"
       ? (await this.#client.repos.listForOrg({ org: namespace, per_page: 100, type: "all" })).data
       : (await this.#client.repos.listForUser({ username: namespace, per_page: 100, type: "all" })).data;
 
@@ -147,7 +171,9 @@ export class GitHubAdapter extends BaseProvider {
   }
 
   async listMembers(namespace: string): Promise<Member[]> {
-    if (this.#namespaceType !== "org") {
+    const namespaceType = this.#namespaces.get(namespace) ?? "org";
+
+    if (namespaceType !== "org") {
       return [];
     }
 

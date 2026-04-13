@@ -1,6 +1,6 @@
 // Import Third-party Dependencies
 import { Gitlab } from "@gitbeaker/rest";
-import type { Repo, FileContent, SubmitParams, SubmitResult, Member } from "@rezzou/core";
+import type { NamespaceType, Namespace, Repo, FileContent, SubmitParams, SubmitResult, Member } from "@rezzou/core";
 
 // Import Internal Dependencies
 import { BaseProvider } from "./base.ts";
@@ -11,6 +11,25 @@ export class GitLabAdapter extends BaseProvider {
   constructor(token: string) {
     super();
     this.#client = new Gitlab({ token });
+  }
+
+  async listNamespaces(): Promise<Namespace[]> {
+    const [user, groups] = await Promise.all([
+      this.#client.Users.showCurrentUser(),
+      this.#client.Groups.all({ minAccessLevel: 20, perPage: 100 })
+    ]);
+
+    return [
+      { id: String(user.id), name: String(user.username), displayName: String(user.name), type: "user" },
+      ...groups.map((group) => {
+        return {
+          id: String(group.id),
+          name: String(group.full_path),
+          displayName: String(group.name),
+          type: "org" as NamespaceType
+        };
+      })
+    ];
   }
 
   async listRepos(namespace: string): Promise<Repo[]> {
