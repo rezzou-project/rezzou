@@ -118,11 +118,60 @@ function DiffCard({ diff }: { diff: RepoDiff; }) {
   );
 }
 
+function OperationForm() {
+  const { operationOverrides, setOperationOverrides } = useAppStore();
+
+  return (
+    <div className="mb-6 rounded-lg border border-gray-800 bg-gray-900 p-4">
+      <h3 className="mb-4 text-sm font-medium text-gray-300">Commit settings</h3>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col gap-1">
+          <label className="text-xs text-gray-500">Branch name</label>
+          <input
+            type="text"
+            value={operationOverrides.branchName}
+            onChange={(e) => setOperationOverrides({ branchName: e.target.value })}
+            className="rounded border border-gray-700 bg-gray-800 px-3 py-1.5 text-xs text-gray-200 focus:border-gray-500 focus:outline-none"
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs text-gray-500">Commit message</label>
+          <input
+            type="text"
+            value={operationOverrides.commitMessage}
+            onChange={(e) => setOperationOverrides({ commitMessage: e.target.value })}
+            className="rounded border border-gray-700 bg-gray-800 px-3 py-1.5 text-xs text-gray-200 focus:border-gray-500 focus:outline-none"
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs text-gray-500">PR / MR title</label>
+          <input
+            type="text"
+            value={operationOverrides.prTitle}
+            onChange={(e) => setOperationOverrides({ prTitle: e.target.value })}
+            className="rounded border border-gray-700 bg-gray-800 px-3 py-1.5 text-xs text-gray-200 focus:border-gray-500 focus:outline-none"
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs text-gray-500">PR / MR description</label>
+          <input
+            type="text"
+            value={operationOverrides.prDescription}
+            onChange={(e) => setOperationOverrides({ prDescription: e.target.value })}
+            className="rounded border border-gray-700 bg-gray-800 px-3 py-1.5 text-xs text-gray-200 focus:border-gray-500 focus:outline-none"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function DiffReview() {
   const { diffs, applyAll } = useAppStore();
   const pendingCount = diffs.filter((diff) => diff.applyStatus === "pending").length;
   const doneCount = diffs.filter((diff) => diff.applyStatus === "done").length;
   const isApplying = diffs.some((diff) => diff.applyStatus === "applying");
+  const isConfigurable = doneCount === 0 && !isApplying;
 
   if (diffs.length === 0) {
     return (
@@ -142,7 +191,7 @@ export function DiffReview() {
           </p>
         </div>
 
-        {pendingCount > 0 && (
+        {pendingCount > 0 && !isConfigurable && (
           <button
             onClick={applyAll}
             disabled={isApplying}
@@ -152,6 +201,19 @@ export function DiffReview() {
           </button>
         )}
       </div>
+
+      {isConfigurable && <OperationForm />}
+
+      {isConfigurable && (
+        <div className="mb-6 flex justify-end">
+          <button
+            onClick={applyAll}
+            className="rounded-lg bg-green-700 px-4 py-1.5 text-sm font-medium transition-colors hover:bg-green-600"
+          >
+            Apply all ({pendingCount})
+          </button>
+        </div>
+      )}
 
       <div className="flex flex-col gap-4">
         {diffs.map((diff) => (

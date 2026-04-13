@@ -7,7 +7,7 @@ import type { Provider, NamespaceType } from "@rezzou/core";
 import { useAppStore } from "../stores/app.js";
 
 // CONSTANTS
-const kProviders: Provider[] = ["gitlab", "github"];
+const kProviders: Provider[] = ["github", "gitlab"];
 const kGitHubNamespaceTypes: NamespaceType[] = ["org", "user"];
 const kProviderConfig = {
   gitlab: {
@@ -32,7 +32,7 @@ const kNamespaceConfig = {
 } as const;
 
 export function SetupForm() {
-  const [provider, setProvider] = useState<Provider>("gitlab");
+  const [provider, setProvider] = useState<Provider>("github");
   const [namespaceType, setNamespaceType] = useState<NamespaceType>("org");
   const [token, setToken] = useState("");
   const [namespace, setNamespace] = useState("");
@@ -61,19 +61,21 @@ export function SetupForm() {
         <h2 className="mb-2 text-2xl font-semibold">{providerConfig.label}</h2>
         <p className="mb-6 text-sm text-gray-400">{providerConfig.description}</p>
 
-        <div className="mb-6 flex rounded-lg border border-gray-700 p-1">
-          {kProviders.map((provider) => (
+        <div className="mb-6 flex gap-1 rounded-lg border border-gray-700 p-1">
+          {kProviders.map((p) => (
             <button
-              key={provider}
+              key={p}
               type="button"
-              onClick={() => handleProviderChange(provider)}
+              onClick={() => handleProviderChange(p)}
               className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                provider === provider
-                  ? "bg-gray-700 text-gray-100"
+                p === provider
+                  ? p === "github"
+                    ? "bg-gray-700 text-gray-100"
+                    : "bg-orange-700 text-white"
                   : "text-gray-400 hover:text-gray-200"
               }`}
             >
-              {provider === "github" ? "GitHub" : "GitLab"}
+              {p === "github" ? "GitHub" : "GitLab"}
             </button>
           ))}
         </div>
@@ -100,19 +102,19 @@ export function SetupForm() {
                 {namespaceConfig.label}
               </label>
               {provider === "github" && (
-                <div className="flex rounded-md border border-gray-700 p-0.5">
-                  {(kGitHubNamespaceTypes).map((namespaceType) => (
+                <div className="flex rounded-md gap-1 border border-gray-700 p-0.5">
+                  {(kGitHubNamespaceTypes).map((ns) => (
                     <button
-                      key={namespaceType}
+                      key={ns}
                       type="button"
-                      onClick={() => setNamespaceType(namespaceType)}
+                      onClick={() => setNamespaceType(ns)}
                       className={`rounded px-2 py-0.5 text-xs font-medium transition-colors ${
-                        namespaceType === namespaceType
+                        ns === namespaceType
                           ? "bg-gray-700 text-gray-100"
                           : "text-gray-400 hover:text-gray-200"
                       }`}
                     >
-                      {namespaceType === "org" ? "Org" : "User"}
+                      {ns === "org" ? "Org" : "User"}
                     </button>
                   ))}
                 </div>

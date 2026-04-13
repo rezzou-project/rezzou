@@ -4,7 +4,10 @@ import * as fs from "node:fs";
 
 // Import Third-party Dependencies
 import { app, BrowserWindow, shell, ipcMain, safeStorage } from "electron";
-import type { Repo, RepoDiff, ProviderAdapter, Provider, NamespaceType } from "@rezzou/core";
+import type { Repo, RepoDiff, ProviderAdapter, Provider, NamespaceType, OperationOverrides } from "@rezzou/core";
+
+// Import Internal Dependencies
+import { handleConnect, handleScanRepos, handleApplyDiff } from "./handlers.ts";
 
 interface ConnectOptions {
   token: string;
@@ -12,9 +15,6 @@ interface ConnectOptions {
   provider: Provider;
   namespaceType: NamespaceType;
 }
-
-// Import Internal Dependencies
-import { handleConnect, handleScanRepos, handleApplyDiff } from "./handlers.ts";
 
 // CONSTANTS
 const kCredentialsFile = "credentials.json";
@@ -82,12 +82,12 @@ app.whenReady().then(() => {
     return handleScanRepos(currentAdapter, repos).catch(toError);
   });
 
-  ipcMain.handle("engine:applyDiff", async(_event, diff: RepoDiff) => {
+  ipcMain.handle("engine:applyDiff", async(_event, { diff, overrides }: { diff: RepoDiff; overrides: OperationOverrides; }) => {
     if (currentAdapter === null) {
       throw new Error("Not connected");
     }
 
-    return handleApplyDiff(currentAdapter, diff).catch(toError);
+    return handleApplyDiff(currentAdapter, diff, overrides).catch(toError);
   });
 
   createWindow();

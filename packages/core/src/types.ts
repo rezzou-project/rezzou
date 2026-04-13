@@ -52,6 +52,8 @@ export interface Operation {
   apply(content: string): string | null;
 }
 
+export type OperationOverrides = Pick<Operation, "branchName" | "commitMessage" | "prTitle" | "prDescription">;
+
 export interface RepoDiff {
   repo: Repo;
   filePath: string;
