@@ -23,7 +23,7 @@ function RepoItem({ repo }: { repo: Repo; }) {
 }
 
 export function RepoList() {
-  const { repos, selectedRepoIds, groupPath, selectAll, deselectAll, scanRepos, isLoading } =
+  const { repos, selectedRepoIds, selectedNamespace, selectAll, deselectAll, scanRepos, isLoading } =
     useAppStore();
   const allSelected = selectedRepoIds.length === repos.length;
 
@@ -31,7 +31,7 @@ export function RepoList() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold">{groupPath}</h2>
+          <h2 className="text-xl font-semibold">{selectedNamespace?.displayName ?? ""}</h2>
           <p className="text-sm text-gray-400">
             {repos.length} repositories · {selectedRepoIds.length} selected
           </p>

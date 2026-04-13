@@ -36,9 +36,11 @@ const kSubmitResult: SubmitResult = {
 describe("UT scanRepos", () => {
   it("should return empty array when repos list is empty", async() => {
     const adapter = {
+      listNamespaces: async() => [],
       listRepos: async() => [],
       getFile: async() => null,
-      submitChanges: async() => kSubmitResult
+      submitChanges: async() => kSubmitResult,
+      listMembers: async() => []
     };
 
     const result = await scanRepos(adapter, [], kOperation);
@@ -48,9 +50,11 @@ describe("UT scanRepos", () => {
 
   it("should skip repo when getFile returns null", async() => {
     const adapter = {
+      listNamespaces: async() => [],
       listRepos: async() => [],
       getFile: async() => null,
-      submitChanges: async() => kSubmitResult
+      submitChanges: async() => kSubmitResult,
+      listMembers: async() => []
     };
 
     const result = await scanRepos(adapter, [kRepo], kOperation);
@@ -60,11 +64,13 @@ describe("UT scanRepos", () => {
 
   it("should skip repo when apply returns null", async() => {
     const adapter = {
+      listNamespaces: async() => [],
       listRepos: async() => [],
       getFile: async() => {
         return { content: "already up to date", ref: "main" };
       },
-      submitChanges: async() => kSubmitResult
+      submitChanges: async() => kSubmitResult,
+      listMembers: async() => []
     };
 
     const operation: Operation = {
@@ -82,11 +88,13 @@ describe("UT scanRepos", () => {
     const updated = "MIT License\nCopyright 2020 updated";
 
     const adapter = {
+      listNamespaces: async() => [],
       listRepos: async() => [],
       getFile: async() => {
         return { content: original, ref: "main" };
       },
-      submitChanges: async() => kSubmitResult
+      submitChanges: async() => kSubmitResult,
+      listMembers: async() => []
     };
 
     const result = await scanRepos(adapter, [kRepo], kOperation);
@@ -107,6 +115,7 @@ describe("UT scanRepos", () => {
     const repoC: Repo = { ...kRepo, id: "3", name: "repo-c", fullPath: "ns/repo-c" };
 
     const adapter = {
+      listNamespaces: async() => [],
       listRepos: async() => [],
       async getFile(repoPath: string) {
         if (repoPath === "ns/repo-b") {
@@ -115,7 +124,8 @@ describe("UT scanRepos", () => {
 
         return { content: "original content", ref: "main" };
       },
-      submitChanges: async() => kSubmitResult
+      submitChanges: async() => kSubmitResult,
+      listMembers: async() => []
     };
 
     const result = await scanRepos(adapter, [repoA, repoB, repoC], kOperation);
@@ -129,13 +139,15 @@ describe("UT scanRepos", () => {
     let capturedArgs: [string, string, string] | undefined;
 
     const adapter = {
+      listNamespaces: async() => [],
       listRepos: async() => [],
       async getFile(repoPath: string, filePath: string, branch: string) {
         capturedArgs = [repoPath, filePath, branch];
 
         return null;
       },
-      submitChanges: async() => kSubmitResult
+      submitChanges: async() => kSubmitResult,
+      listMembers: async() => []
     };
 
     await scanRepos(adapter, [kRepo], kOperation);
@@ -156,13 +168,15 @@ describe("UT applyRepoDiff", () => {
     let capturedParams: SubmitParams | undefined;
 
     const adapter = {
+      listNamespaces: async() => [],
       listRepos: async() => [],
       getFile: async() => null,
       async submitChanges(params: SubmitParams) {
         capturedParams = params;
 
         return kSubmitResult;
-      }
+      },
+      listMembers: async() => []
     };
 
     const result = await applyRepoDiff(adapter, diff, kOperation);

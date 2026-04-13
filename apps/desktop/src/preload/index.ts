@@ -1,6 +1,6 @@
 // Import Third-party Dependencies
 import { contextBridge, ipcRenderer } from "electron";
-import type { Repo, RepoDiff, SubmitResult, Provider, NamespaceType, OperationOverrides, Member } from "@rezzou/core";
+import type { Repo, RepoDiff, SubmitResult, Provider, Namespace, OperationOverrides, Member } from "@rezzou/core";
 
 contextBridge.exposeInMainWorld("versions", {
   electron: process.versions.electron,
@@ -8,11 +8,12 @@ contextBridge.exposeInMainWorld("versions", {
 });
 
 contextBridge.exposeInMainWorld("api", {
-  connect: (
+  authenticate: (
     token: string,
-    groupPath: string,
-    options: { provider: Provider; namespaceType: NamespaceType; }
-  ): Promise<Repo[]> => ipcRenderer.invoke("auth:connect", { token, groupPath, ...options }),
+    provider: Provider
+  ): Promise<Namespace[]> => ipcRenderer.invoke("auth:authenticate", { token, provider }),
+
+  loadRepos: (namespace: string): Promise<Repo[]> => ipcRenderer.invoke("auth:loadRepos", namespace),
 
   scanRepos: (repos: Repo[]): Promise<RepoDiff[]> => ipcRenderer.invoke("engine:scanRepos", repos),
 

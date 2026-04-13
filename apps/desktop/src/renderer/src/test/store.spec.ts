@@ -3,7 +3,7 @@ import { describe, it, mock, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 
 // Import Third-party Dependencies
-import type { Repo, RepoDiff, SubmitResult } from "@rezzou/core";
+import type { Repo, RepoDiff, SubmitResult, Namespace } from "@rezzou/core";
 
 // CONSTANTS
 const kCurrentYear = String(new Date().getFullYear());
@@ -13,6 +13,12 @@ const kRepo: Repo = {
   fullPath: "ns/my-repo",
   defaultBranch: "main",
   url: "https://gitlab.com/ns/my-repo"
+};
+const kNamespace: Namespace = {
+  id: "ns",
+  name: "ns",
+  displayName: "My Namespace",
+  type: "org"
 };
 const kDiff: RepoDiff = {
   repo: kRepo,
@@ -25,13 +31,15 @@ const kSubmitResult: SubmitResult = {
   prTitle: "chore: update license year"
 };
 
-const mockApiConnect = mock.fn(async() => [] as Repo[]);
+const mockApiAuthenticate = mock.fn(async() => [kNamespace] as Namespace[]);
+const mockApiLoadRepos = mock.fn(async() => [] as Repo[]);
 const mockApiScanRepos = mock.fn(async(_repos: Repo[]): Promise<RepoDiff[]> => []);
 const mockApiApplyDiff = mock.fn(async() => kSubmitResult);
 
 (globalThis as Record<string, unknown>).window = {
   api: {
-    connect: mockApiConnect,
+    authenticate: mockApiAuthenticate,
+    loadRepos: mockApiLoadRepos,
     scanRepos: mockApiScanRepos,
     applyDiff: mockApiApplyDiff
   }
@@ -43,43 +51,41 @@ function getState() {
   return useAppStore.getState();
 }
 
+async function setupRepos(repos: Repo[] = [kRepo]): Promise<void> {
+  mockApiAuthenticate.mock.mockImplementationOnce(async() => [kNamespace]);
+  mockApiLoadRepos.mock.mockImplementationOnce(async() => repos);
+  await getState().authenticate("token", "gitlab");
+  await getState().loadRepos(kNamespace);
+}
+
 beforeEach(() => {
   getState().reset();
-  mockApiConnect.mock.resetCalls();
+  mockApiAuthenticate.mock.resetCalls();
+  mockApiLoadRepos.mock.resetCalls();
   mockApiScanRepos.mock.resetCalls();
   mockApiApplyDiff.mock.resetCalls();
 });
 
-describe("connect", () => {
-  it("should transition to repos step and store repos on success", async() => {
-    mockApiConnect.mock.mockImplementation(async() => [kRepo]);
+describe("authenticate", () => {
+  it("should store namespaces and stay on connect step on success", async() => {
+    const namespaces: Namespace[] = [kNamespace];
+    mockApiAuthenticate.mock.mockImplementation(async() => namespaces);
 
-    await getState().connect("token", "ns", { provider: "gitlab", namespaceType: "org" });
+    await getState().authenticate("token", "gitlab");
 
     const state = getState();
-    assert.equal(state.step, "repos");
-    assert.deepEqual(state.repos, [kRepo]);
-    assert.deepEqual(state.selectedRepoIds, [kRepo.id]);
+    assert.equal(state.step, "connect");
+    assert.deepEqual(state.namespaces, namespaces);
     assert.equal(state.isLoading, false);
     assert.equal(state.error, null);
   });
 
-  it("should select all repos by default after connect", async() => {
-    const repoA: Repo = { ...kRepo, id: "1" };
-    const repoB: Repo = { ...kRepo, id: "2" };
-    mockApiConnect.mock.mockImplementation(async() => [repoA, repoB]);
-
-    await getState().connect("token", "ns", { provider: "gitlab", namespaceType: "org" });
-
-    assert.deepEqual(getState().selectedRepoIds, ["1", "2"]);
-  });
-
-  it("should set error and stay on connect step on failure", async() => {
-    mockApiConnect.mock.mockImplementation(async() => {
+  it("should set error and clear loading on failure", async() => {
+    mockApiAuthenticate.mock.mockImplementation(async() => {
       throw new Error("Unauthorized");
     });
 
-    await getState().connect("bad-token", "ns", { provider: "gitlab", namespaceType: "org" });
+    await getState().authenticate("bad-token", "gitlab");
 
     const state = getState();
     assert.equal(state.step, "connect");
@@ -87,27 +93,72 @@ describe("connect", () => {
     assert.equal(state.isLoading, false);
   });
 
-  it("should call window.api.connect with token and groupPath", async() => {
-    mockApiConnect.mock.mockImplementation(async() => []);
+  it("should call window.api.authenticate with token and provider", async() => {
+    mockApiAuthenticate.mock.mockImplementation(async() => []);
 
-    await getState().connect("my-token", "my-org", { provider: "gitlab", namespaceType: "org" });
+    await getState().authenticate("my-token", "github");
 
-    assert.equal(mockApiConnect.mock.callCount(), 1);
-    assert.deepEqual(
-      mockApiConnect.mock.calls[0].arguments,
-      [
-        "my-token",
-        "my-org",
-        { provider: "gitlab", namespaceType: "org" }
-      ]
-    );
+    assert.equal(mockApiAuthenticate.mock.callCount(), 1);
+    assert.deepEqual(mockApiAuthenticate.mock.calls[0].arguments, ["my-token", "github"]);
+  });
+});
+
+describe("loadRepos", () => {
+  beforeEach(async() => {
+    mockApiAuthenticate.mock.mockImplementation(async() => [kNamespace]);
+    await getState().authenticate("token", "gitlab");
+  });
+
+  it("should transition to repos step and store repos on success", async() => {
+    mockApiLoadRepos.mock.mockImplementation(async() => [kRepo]);
+
+    await getState().loadRepos(kNamespace);
+
+    const state = getState();
+    assert.equal(state.step, "repos");
+    assert.deepEqual(state.repos, [kRepo]);
+    assert.deepEqual(state.selectedRepoIds, [kRepo.id]);
+    assert.deepEqual(state.selectedNamespace, kNamespace);
+    assert.equal(state.isLoading, false);
+    assert.equal(state.error, null);
+  });
+
+  it("should select all repos by default after loading", async() => {
+    const repoA: Repo = { ...kRepo, id: "1" };
+    const repoB: Repo = { ...kRepo, id: "2" };
+    mockApiLoadRepos.mock.mockImplementation(async() => [repoA, repoB]);
+
+    await getState().loadRepos(kNamespace);
+
+    assert.deepEqual(getState().selectedRepoIds, ["1", "2"]);
+  });
+
+  it("should set error and stay on connect step on failure", async() => {
+    mockApiLoadRepos.mock.mockImplementation(async() => {
+      throw new Error("Forbidden");
+    });
+
+    await getState().loadRepos(kNamespace);
+
+    const state = getState();
+    assert.equal(state.step, "connect");
+    assert.equal(state.error, "Forbidden");
+    assert.equal(state.isLoading, false);
+  });
+
+  it("should call window.api.loadRepos with namespace name", async() => {
+    mockApiLoadRepos.mock.mockImplementation(async() => []);
+
+    await getState().loadRepos(kNamespace);
+
+    assert.equal(mockApiLoadRepos.mock.callCount(), 1);
+    assert.deepEqual(mockApiLoadRepos.mock.calls[0].arguments, [kNamespace.name]);
   });
 });
 
 describe("toggleRepo", () => {
   beforeEach(async() => {
-    mockApiConnect.mock.mockImplementation(async() => [kRepo]);
-    await getState().connect("token", "ns", { provider: "gitlab", namespaceType: "org" });
+    await setupRepos([kRepo]);
   });
 
   it("should deselect a selected repo", () => {
@@ -129,8 +180,7 @@ describe("selectAll / deselectAll", () => {
   const repoB: Repo = { ...kRepo, id: "2" };
 
   beforeEach(async() => {
-    mockApiConnect.mock.mockImplementation(async() => [repoA, repoB]);
-    await getState().connect("token", "ns", { provider: "gitlab", namespaceType: "org" });
+    await setupRepos([repoA, repoB]);
   });
 
   it("should deselect all repos", () => {
@@ -149,8 +199,7 @@ describe("selectAll / deselectAll", () => {
 
 describe("scanRepos", () => {
   beforeEach(async() => {
-    mockApiConnect.mock.mockImplementation(async() => [kRepo]);
-    await getState().connect("token", "ns", { provider: "gitlab", namespaceType: "org" });
+    await setupRepos([kRepo]);
   });
 
   it("should transition to diffs step with returned diffs", async() => {
@@ -168,8 +217,7 @@ describe("scanRepos", () => {
   it("should only pass selected repos to window.api.scanRepos", async() => {
     const repoA: Repo = { ...kRepo, id: "1" };
     const repoB: Repo = { ...kRepo, id: "2" };
-    mockApiConnect.mock.mockImplementation(async() => [repoA, repoB]);
-    await getState().connect("token", "ns", { provider: "gitlab", namespaceType: "org" });
+    await setupRepos([repoA, repoB]);
 
     getState().toggleRepo("2");
     mockApiScanRepos.mock.mockImplementation(async() => []);
@@ -183,8 +231,7 @@ describe("scanRepos", () => {
 
 describe("applyDiff", () => {
   beforeEach(async() => {
-    mockApiConnect.mock.mockImplementation(async() => [kRepo]);
-    await getState().connect("token", "ns", { provider: "gitlab", namespaceType: "org" });
+    await setupRepos([kRepo]);
     mockApiScanRepos.mock.mockImplementation(async() => [kDiff]);
     await getState().scanRepos();
   });
@@ -225,8 +272,7 @@ describe("applyAll", () => {
     const diffA: RepoDiff = { ...kDiff, repo: repoA };
     const diffB: RepoDiff = { ...kDiff, repo: repoB };
 
-    mockApiConnect.mock.mockImplementation(async() => [repoA, repoB]);
-    await getState().connect("token", "ns", { provider: "gitlab", namespaceType: "org" });
+    await setupRepos([repoA, repoB]);
     mockApiScanRepos.mock.mockImplementation(async() => [diffA, diffB]);
     await getState().scanRepos();
     mockApiApplyDiff.mock.mockImplementation(async() => kSubmitResult);
@@ -238,8 +284,7 @@ describe("applyAll", () => {
   });
 
   it("should skip diffs that are not pending", async() => {
-    mockApiConnect.mock.mockImplementation(async() => [kRepo]);
-    await getState().connect("token", "ns", { provider: "gitlab", namespaceType: "org" });
+    await setupRepos([kRepo]);
     mockApiScanRepos.mock.mockImplementation(async() => [kDiff]);
     await getState().scanRepos();
 
@@ -255,14 +300,15 @@ describe("applyAll", () => {
 
 describe("reset", () => {
   it("should restore initial state", async() => {
-    mockApiConnect.mock.mockImplementation(async() => [kRepo]);
-    await getState().connect("token", "ns", { provider: "gitlab", namespaceType: "org" });
+    await setupRepos([kRepo]);
 
     getState().reset();
 
     const state = getState();
     assert.equal(state.step, "connect");
     assert.deepEqual(state.repos, []);
+    assert.deepEqual(state.namespaces, []);
+    assert.equal(state.selectedNamespace, null);
     assert.deepEqual(state.selectedRepoIds, []);
     assert.equal(state.error, null);
   });

@@ -3,7 +3,7 @@ import { describe, it, mock, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 
 // Import Third-party Dependencies
-import type { Repo, RepoDiff, SubmitResult, ProviderAdapter } from "@rezzou/core";
+import type { Repo, RepoDiff, SubmitResult, ProviderAdapter, Namespace, OperationOverrides } from "@rezzou/core";
 
 // CONSTANTS
 const kCurrentYear = String(new Date().getFullYear());
@@ -25,25 +25,38 @@ const kSubmitResult: SubmitResult = {
   prUrl: "https://gitlab.com/ns/my-repo/-/merge_requests/1",
   prTitle: "chore: update license year"
 };
+const kOverrides: OperationOverrides = {
+  branchName: `rezzou/license-year-${kCurrentYear}`,
+  commitMessage: `chore: update license year to ${kCurrentYear}`,
+  prTitle: `chore: update license year to ${kCurrentYear}`,
+  prDescription: "Automated update",
+  reviewers: []
+};
 
+const mockListNamespaces = mock.fn(async() => [] as Namespace[]);
 const mockListRepos = mock.fn(async() => [] as Repo[]);
 const mockGetFile = mock.fn(async() => null);
 const mockSubmitChanges = mock.fn(async() => kSubmitResult);
+const mockListMembers = mock.fn(async() => []);
 
 mock.module("@rezzou/providers", {
   namedExports: {
     GitLabAdapter: mock.fn(function MockGitLabAdapter() {
       return {
+        listNamespaces: mockListNamespaces,
         listRepos: mockListRepos,
         getFile: mockGetFile,
-        submitChanges: mockSubmitChanges
+        submitChanges: mockSubmitChanges,
+        listMembers: mockListMembers
       };
     }),
     GitHubAdapter: mock.fn(function MockGitHubAdapter() {
       return {
+        listNamespaces: mockListNamespaces,
         listRepos: mockListRepos,
         getFile: mockGetFile,
-        submitChanges: mockSubmitChanges
+        submitChanges: mockSubmitChanges,
+        listMembers: mockListMembers
       };
     })
   }
@@ -74,47 +87,81 @@ mock.module("@rezzou/operations", {
   }
 });
 
-const { handleConnect, handleScanRepos, handleApplyDiff } = await import("../handlers.ts");
+const { handleAuthenticate, handleLoadRepos, handleScanRepos, handleApplyDiff } = await import("../handlers.ts");
 
 const kMockAdapter: ProviderAdapter = {
+  listNamespaces: mockListNamespaces,
   listRepos: mockListRepos,
   getFile: mockGetFile,
-  submitChanges: mockSubmitChanges
+  submitChanges: mockSubmitChanges,
+  listMembers: mockListMembers
 };
 
-describe("handleConnect", () => {
+describe("handleAuthenticate", () => {
+  beforeEach(() => {
+    mockListNamespaces.mock.resetCalls();
+  });
+
+  it("should create a GitLabAdapter and return namespaces for gitlab provider", async() => {
+    const namespaces: Namespace[] = [
+      { id: "1", name: "testuser", displayName: "Test User", type: "user" }
+    ];
+    mockListNamespaces.mock.mockImplementation(async() => namespaces);
+
+    const result = await handleAuthenticate(kToken, "gitlab");
+
+    assert.equal(mockListNamespaces.mock.callCount(), 1);
+    assert.deepEqual(result.namespaces, namespaces);
+    assert.ok(result.adapter !== null);
+  });
+
+  it("should create a GitHubAdapter and return namespaces for github provider", async() => {
+    const namespaces: Namespace[] = [
+      { id: "john", name: "john", displayName: "John", type: "user" },
+      { id: "my-org", name: "my-org", displayName: "my-org", type: "org" }
+    ];
+    mockListNamespaces.mock.mockImplementation(async() => namespaces);
+
+    const result = await handleAuthenticate(kToken, "github");
+
+    assert.equal(mockListNamespaces.mock.callCount(), 1);
+    assert.deepEqual(result.namespaces, namespaces);
+    assert.ok(result.adapter !== null);
+  });
+
+  it("should return only the user namespace when the user has no orgs", async() => {
+    const namespaces: Namespace[] = [
+      { id: "solo", name: "solo", displayName: "Solo Dev", type: "user" }
+    ];
+    mockListNamespaces.mock.mockImplementation(async() => namespaces);
+
+    const result = await handleAuthenticate(kToken, "gitlab");
+
+    assert.deepEqual(result.namespaces, namespaces);
+  });
+});
+
+describe("handleLoadRepos", () => {
   beforeEach(() => {
     mockListRepos.mock.resetCalls();
   });
 
-  it("should create a GitLabAdapter and return repos for gitlab provider", async() => {
+  it("should call listRepos with the namespace name and return repos", async() => {
     mockListRepos.mock.mockImplementation(async() => [kRepo]);
 
-    const result = await handleConnect(kToken, "ns", { provider: "gitlab", namespaceType: "org" });
+    const result = await handleLoadRepos(kMockAdapter, "ns");
 
     assert.equal(mockListRepos.mock.callCount(), 1);
     assert.deepEqual(mockListRepos.mock.calls[0].arguments, ["ns"]);
-    assert.deepEqual(result.repos, [kRepo]);
-    assert.ok(result.adapter !== null);
+    assert.deepEqual(result, [kRepo]);
   });
 
-  it("should create a GitHubAdapter and return repos for github provider", async() => {
-    mockListRepos.mock.mockImplementation(async() => [kRepo]);
-
-    const result = await handleConnect(kToken, "my-org", { provider: "github", namespaceType: "org" });
-
-    assert.equal(mockListRepos.mock.callCount(), 1);
-    assert.deepEqual(mockListRepos.mock.calls[0].arguments, ["my-org"]);
-    assert.deepEqual(result.repos, [kRepo]);
-    assert.ok(result.adapter !== null);
-  });
-
-  it("should return an empty repos array when the namespace has no repos", async() => {
+  it("should return an empty array when the namespace has no repos", async() => {
     mockListRepos.mock.mockImplementation(async() => []);
 
-    const result = await handleConnect(kToken, "empty-ns", { provider: "gitlab", namespaceType: "org" });
+    const result = await handleLoadRepos(kMockAdapter, "empty-ns");
 
-    assert.deepEqual(result.repos, []);
+    assert.deepEqual(result, []);
   });
 });
 
@@ -151,7 +198,7 @@ describe("handleApplyDiff", () => {
   it("should call applyRepoDiff with the given adapter and return the result", async() => {
     mockApplyRepoDiff.mock.mockImplementation(async() => kSubmitResult);
 
-    const result = await handleApplyDiff(kMockAdapter, kDiff);
+    const result = await handleApplyDiff(kMockAdapter, kDiff, kOverrides);
 
     assert.equal(mockApplyRepoDiff.mock.callCount(), 1);
     assert.deepEqual(result, kSubmitResult);
@@ -160,7 +207,7 @@ describe("handleApplyDiff", () => {
   it("should pass the provided diff to applyRepoDiff", async() => {
     mockApplyRepoDiff.mock.mockImplementation(async() => kSubmitResult);
 
-    await handleApplyDiff(kMockAdapter, kDiff);
+    await handleApplyDiff(kMockAdapter, kDiff, kOverrides);
 
     const [, diff] = mockApplyRepoDiff.mock.calls[0].arguments;
     assert.deepEqual(diff, kDiff);

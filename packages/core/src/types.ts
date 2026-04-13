@@ -1,6 +1,13 @@
 export type Provider = "gitlab" | "github";
 export type NamespaceType = "org" | "user";
 
+export interface Namespace {
+  id: string;
+  name: string;
+  displayName: string;
+  type: NamespaceType;
+}
+
 export interface Repo {
   id: string;
   name: string;
@@ -44,6 +51,7 @@ export interface Member {
 }
 
 export interface ProviderAdapter {
+  listNamespaces(): Promise<Namespace[]>;
   listRepos(namespace: string): Promise<Repo[]>;
   getFile(repoPath: string, filePath: string, branch: string): Promise<FileContent | null>;
   submitChanges(params: SubmitParams): Promise<SubmitResult>;

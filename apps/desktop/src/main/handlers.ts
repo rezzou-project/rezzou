@@ -5,7 +5,7 @@ import {
   scanRepos,
   applyRepoDiff,
   type Provider,
-  type NamespaceType,
+  type Namespace,
   type Repo,
   type RepoDiff,
   type SubmitResult,
@@ -14,22 +14,23 @@ import {
   type Member
 } from "@rezzou/core";
 
-interface ProviderOptions {
-  provider: Provider;
-  namespaceType: NamespaceType;
+export async function handleAuthenticate(
+  token: string,
+  provider: Provider
+): Promise<{ adapter: ProviderAdapter; namespaces: Namespace[]; }> {
+  const adapter = provider === "github"
+    ? new GitHubAdapter(token)
+    : new GitLabAdapter(token);
+  const namespaces = await adapter.listNamespaces();
+
+  return { adapter, namespaces };
 }
 
-export async function handleConnect(
-  token: string,
-  groupPath: string,
-  { provider, namespaceType }: ProviderOptions
-): Promise<{ adapter: ProviderAdapter; repos: Repo[]; }> {
-  const adapter = provider === "github"
-    ? new GitHubAdapter(token, namespaceType)
-    : new GitLabAdapter(token);
-  const repos = await adapter.listRepos(groupPath);
-
-  return { adapter, repos };
+export async function handleLoadRepos(
+  adapter: ProviderAdapter,
+  namespace: string
+): Promise<Repo[]> {
+  return adapter.listRepos(namespace);
 }
 
 export async function handleScanRepos(adapter: ProviderAdapter, repos: Repo[]): Promise<RepoDiff[]> {

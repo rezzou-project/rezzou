@@ -222,21 +222,19 @@ function ReviewerSelect({ members, isLoading, selected, onChange }: ReviewerSele
 }
 
 function OperationForm() {
-  const { operationOverrides, setOperationOverrides, groupPath, namespaceType } = useAppStore();
+  const { operationOverrides, setOperationOverrides, selectedNamespace } = useAppStore();
   const [members, setMembers] = useState<Member[]>([]);
   const [isFetchingMembers, setIsFetchingMembers] = useState(false);
 
   useEffect(() => {
-    if (namespaceType !== "org" || !groupPath) {
-      return;
+    if (selectedNamespace?.type === "org") {
+      setIsFetchingMembers(true);
+      window.api.fetchMembers(selectedNamespace.name)
+        .then(setMembers)
+        .catch(() => setMembers([]))
+        .finally(() => setIsFetchingMembers(false));
     }
-
-    setIsFetchingMembers(true);
-    window.api.fetchMembers(groupPath)
-      .then(setMembers)
-      .catch(() => setMembers([]))
-      .finally(() => setIsFetchingMembers(false));
-  }, [groupPath, namespaceType]);
+  }, [selectedNamespace]);
 
   return (
     <div className="mb-6 rounded-lg border border-gray-800 bg-gray-900 p-4">
@@ -278,7 +276,7 @@ function OperationForm() {
             className="rounded border border-gray-700 bg-gray-800 px-3 py-1.5 text-xs text-gray-200 focus:border-gray-500 focus:outline-none"
           />
         </div>
-        {namespaceType === "org" && (
+        {selectedNamespace?.type === "org" && (
           <div className="col-span-2 flex flex-col gap-1">
             <label className="text-xs text-gray-500">Reviewers <span className="text-gray-600">(optional)</span></label>
             <ReviewerSelect

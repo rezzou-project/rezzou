@@ -5,6 +5,14 @@ import assert from "node:assert/strict";
 // CONSTANTS
 const kToken = "test-token";
 
+const mockGetAuthenticated = mock.fn(async() => {
+  return { data: { login: "testuser", name: "Test User" } };
+});
+
+const mockListForAuthenticatedUser = mock.fn(async() => {
+  return { data: [] as unknown[] };
+});
+
 const mockListForOrg = mock.fn(async() => {
   return { data: [] as unknown[] };
 });
@@ -37,6 +45,9 @@ mock.module("@octokit/rest", {
   namedExports: {
     Octokit: mock.fn(function MockOctokit() {
       return {
+        users: {
+          getAuthenticated: mockGetAuthenticated
+        },
         repos: {
           listForOrg: mockListForOrg,
           listForUser: mockListForUser,
@@ -52,6 +63,7 @@ mock.module("@octokit/rest", {
           requestReviewers: mockRequestReviewers
         },
         orgs: {
+          listForAuthenticatedUser: mockListForAuthenticatedUser,
           listMembers: mockListOrgMembers
         }
       };
@@ -61,8 +73,38 @@ mock.module("@octokit/rest", {
 
 const { GitHubAdapter } = await import("../github.ts");
 
+async function setupOrgAdapter(org: string, user = "testuser") {
+  mockGetAuthenticated.mock.mockImplementationOnce(async() => {
+    return { data: { login: user, name: user } };
+  });
+  mockListForAuthenticatedUser.mock.mockImplementationOnce(async() => {
+    return { data: [{ login: org }] };
+  });
+
+  const adapter = new GitHubAdapter(kToken);
+  await adapter.listNamespaces();
+
+  return adapter;
+}
+
+async function setupUserAdapter(login: string) {
+  mockGetAuthenticated.mock.mockImplementationOnce(async() => {
+    return { data: { login, name: login } };
+  });
+  mockListForAuthenticatedUser.mock.mockImplementationOnce(async() => {
+    return { data: [] };
+  });
+
+  const adapter = new GitHubAdapter(kToken);
+  await adapter.listNamespaces();
+
+  return adapter;
+}
+
 describe("GitHubAdapter", () => {
   beforeEach(() => {
+    mockGetAuthenticated.mock.resetCalls();
+    mockListForAuthenticatedUser.mock.resetCalls();
     mockListForOrg.mock.resetCalls();
     mockListForUser.mock.resetCalls();
     mockGetContent.mock.resetCalls();
@@ -72,6 +114,78 @@ describe("GitHubAdapter", () => {
     mockPullsCreate.mock.resetCalls();
     mockRequestReviewers.mock.resetCalls();
     mockListOrgMembers.mock.resetCalls();
+  });
+
+  describe("listNamespaces", () => {
+    it("should return the authenticated user as a user namespace", async() => {
+      mockGetAuthenticated.mock.mockImplementation(async() => {
+        return { data: { login: "john", name: "John Doe" } };
+      });
+      mockListForAuthenticatedUser.mock.mockImplementation(async() => {
+        return { data: [] };
+      });
+
+      const adapter = new GitHubAdapter(kToken);
+      const result = await adapter.listNamespaces();
+
+      assert.equal(result.length, 1);
+      assert.deepEqual(result[0], {
+        id: "john",
+        name: "john",
+        displayName: "John Doe",
+        type: "user"
+      });
+    });
+
+    it("should fall back to login for displayName when user.name is null", async() => {
+      mockGetAuthenticated.mock.mockImplementation(async() => {
+        return { data: { login: "john", name: null as unknown as string } };
+      });
+      mockListForAuthenticatedUser.mock.mockImplementation(async() => {
+        return { data: [] };
+      });
+
+      const adapter = new GitHubAdapter(kToken);
+      const result = await adapter.listNamespaces();
+
+      assert.equal(result[0].displayName, "john");
+    });
+
+    it("should return org namespaces alongside the user namespace", async() => {
+      mockGetAuthenticated.mock.mockImplementation(async() => {
+        return { data: { login: "john", name: "John" } };
+      });
+      mockListForAuthenticatedUser.mock.mockImplementation(async() => {
+        return { data: [{ login: "my-org" }, { login: "another-org" }] };
+      });
+
+      const adapter = new GitHubAdapter(kToken);
+      const result = await adapter.listNamespaces();
+
+      assert.equal(result.length, 3);
+      assert.equal(result[0].type, "user");
+      assert.equal(result[1].type, "org");
+      assert.equal(result[1].name, "my-org");
+      assert.equal(result[2].type, "org");
+      assert.equal(result[2].name, "another-org");
+    });
+
+    it("should call listForAuthenticatedUser with pagination options", async() => {
+      mockGetAuthenticated.mock.mockImplementation(async() => {
+        return { data: { login: "john", name: "John" } };
+      });
+      mockListForAuthenticatedUser.mock.mockImplementation(async() => {
+        return { data: [] };
+      });
+
+      const adapter = new GitHubAdapter(kToken);
+      await adapter.listNamespaces();
+
+      assert.equal(mockListForAuthenticatedUser.mock.callCount(), 1);
+      assert.deepEqual(mockListForAuthenticatedUser.mock.calls[0].arguments, [
+        { per_page: 100 }
+      ]);
+    });
   });
 
   describe("listRepos", () => {
@@ -91,7 +205,7 @@ describe("GitHubAdapter", () => {
         };
       });
 
-      const adapter = new GitHubAdapter(kToken, "org");
+      const adapter = await setupOrgAdapter("my-org");
       const result = await adapter.listRepos("my-org");
 
       assert.deepEqual(result, [
@@ -115,14 +229,14 @@ describe("GitHubAdapter", () => {
         };
       });
 
-      const adapter = new GitHubAdapter(kToken, "org");
+      const adapter = await setupOrgAdapter("org");
       const result = await adapter.listRepos("org");
 
       assert.equal(result.length, 1);
       assert.equal(result[0].name, "active");
     });
 
-    it("should call listForUser when namespaceType is user", async() => {
+    it("should call listForUser when namespace type is user", async() => {
       mockListForUser.mock.mockImplementation(async() => {
         return {
           data: [
@@ -138,7 +252,7 @@ describe("GitHubAdapter", () => {
         };
       });
 
-      const adapter = new GitHubAdapter(kToken, "user");
+      const adapter = await setupUserAdapter("john");
       const result = await adapter.listRepos("john");
 
       assert.equal(mockListForOrg.mock.callCount(), 0);
@@ -151,7 +265,7 @@ describe("GitHubAdapter", () => {
         return { data: [] };
       });
 
-      const adapter = new GitHubAdapter(kToken, "org");
+      const adapter = await setupOrgAdapter("my-org");
       await adapter.listRepos("my-org");
 
       assert.equal(mockListForOrg.mock.callCount(), 1);
@@ -172,7 +286,7 @@ describe("GitHubAdapter", () => {
         };
       });
 
-      const adapter = new GitHubAdapter(kToken, "org");
+      const adapter = new GitHubAdapter(kToken);
       const result = await adapter.getFile("owner/repo", "LICENSE", "main");
 
       assert.deepEqual(result, { content: rawContent, ref: "main" });
@@ -183,7 +297,7 @@ describe("GitHubAdapter", () => {
         throw new Error("404 Not Found");
       });
 
-      const adapter = new GitHubAdapter(kToken, "org");
+      const adapter = new GitHubAdapter(kToken);
       const result = await adapter.getFile("owner/repo", "LICENSE", "main");
 
       assert.equal(result, null);
@@ -196,7 +310,7 @@ describe("GitHubAdapter", () => {
         };
       });
 
-      const adapter = new GitHubAdapter(kToken, "org");
+      const adapter = new GitHubAdapter(kToken);
       const result = await adapter.getFile("owner/repo", "src", "main");
 
       assert.equal(result, null);
@@ -210,7 +324,7 @@ describe("GitHubAdapter", () => {
         };
       });
 
-      const adapter = new GitHubAdapter(kToken, "org");
+      const adapter = new GitHubAdapter(kToken);
       await adapter.getFile("owner/repo", "LICENSE", "develop");
 
       assert.equal(mockGetContent.mock.callCount(), 1);
@@ -251,7 +365,7 @@ describe("GitHubAdapter", () => {
     });
 
     it("should return prUrl and prTitle", async() => {
-      const adapter = new GitHubAdapter(kToken, "org");
+      const adapter = new GitHubAdapter(kToken);
       const result = await adapter.submitChanges(kParams);
 
       assert.deepEqual(result, {
@@ -261,7 +375,7 @@ describe("GitHubAdapter", () => {
     });
 
     it("should create the head branch from the base branch SHA", async() => {
-      const adapter = new GitHubAdapter(kToken, "org");
+      const adapter = new GitHubAdapter(kToken);
       await adapter.submitChanges(kParams);
 
       assert.equal(mockCreateRef.mock.callCount(), 1);
@@ -276,7 +390,7 @@ describe("GitHubAdapter", () => {
     });
 
     it("should commit all files in a single signed GraphQL commit", async() => {
-      const adapter = new GitHubAdapter(kToken, "org");
+      const adapter = new GitHubAdapter(kToken);
       await adapter.submitChanges(kParams);
 
       assert.equal(mockRequest.mock.callCount(), 1);
@@ -299,7 +413,7 @@ describe("GitHubAdapter", () => {
     });
 
     it("should create a PR targeting the base branch", async() => {
-      const adapter = new GitHubAdapter(kToken, "org");
+      const adapter = new GitHubAdapter(kToken);
       await adapter.submitChanges(kParams);
 
       assert.equal(mockPullsCreate.mock.callCount(), 1);
@@ -316,7 +430,7 @@ describe("GitHubAdapter", () => {
     });
 
     it("should request reviewers when reviewers are provided", async() => {
-      const adapter = new GitHubAdapter(kToken, "org");
+      const adapter = new GitHubAdapter(kToken);
       await adapter.submitChanges({ ...kParams, reviewers: ["john", "bob"] });
 
       assert.equal(mockRequestReviewers.mock.callCount(), 1);
@@ -331,7 +445,7 @@ describe("GitHubAdapter", () => {
     });
 
     it("should not request reviewers when reviewers is empty", async() => {
-      const adapter = new GitHubAdapter(kToken, "org");
+      const adapter = new GitHubAdapter(kToken);
       await adapter.submitChanges({ ...kParams, reviewers: [] });
 
       assert.equal(mockRequestReviewers.mock.callCount(), 0);
@@ -349,7 +463,7 @@ describe("GitHubAdapter", () => {
         };
       });
 
-      const adapter = new GitHubAdapter(kToken, "org");
+      const adapter = await setupOrgAdapter("my-org");
       const result = await adapter.listMembers("my-org");
 
       assert.deepEqual(result, [
@@ -363,7 +477,7 @@ describe("GitHubAdapter", () => {
         return { data: [] };
       });
 
-      const adapter = new GitHubAdapter(kToken, "org");
+      const adapter = await setupOrgAdapter("my-org");
       await adapter.listMembers("my-org");
 
       assert.equal(mockListOrgMembers.mock.callCount(), 1);
@@ -373,7 +487,7 @@ describe("GitHubAdapter", () => {
     });
 
     it("should return empty array for user namespace", async() => {
-      const adapter = new GitHubAdapter(kToken, "user");
+      const adapter = await setupUserAdapter("john");
       const result = await adapter.listMembers("john");
 
       assert.deepEqual(result, []);
