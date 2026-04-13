@@ -66,7 +66,8 @@ const kInitialState: AppState = {
     branchName: licenseYearOperation.branchName,
     commitMessage: licenseYearOperation.commitMessage,
     prTitle: licenseYearOperation.prTitle,
-    prDescription: licenseYearOperation.prDescription
+    prDescription: licenseYearOperation.prDescription,
+    reviewers: licenseYearOperation.reviewers
   },
   isLoading: false,
   error: null

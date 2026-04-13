@@ -1,6 +1,6 @@
 // Import Third-party Dependencies
 import { Gitlab } from "@gitbeaker/rest";
-import type { Repo, FileContent, SubmitParams, SubmitResult } from "@rezzou/core";
+import type { Repo, FileContent, SubmitParams, SubmitResult, Member } from "@rezzou/core";
 
 // Import Internal Dependencies
 import { BaseProvider } from "./base.ts";
@@ -44,6 +44,23 @@ export class GitLabAdapter extends BaseProvider {
     }
   }
 
+  async #resolveUserIds(usernames: string[]): Promise<number[]> {
+    const results = await Promise.all(
+      usernames.map(async(username) => {
+        const users = await this.#client.Users.all({ username });
+        const user = users.find((u) => String(u.username) === username);
+
+        if (!user) {
+          throw new Error(`Unknown reviewer: ${username}`);
+        }
+
+        return Number(user.id);
+      })
+    );
+
+    return results;
+  }
+
   async submitChanges(params: SubmitParams): Promise<SubmitResult> {
     await this.#client.Commits.create(
       params.repoPath,
@@ -59,17 +76,35 @@ export class GitLabAdapter extends BaseProvider {
       { startBranch: params.baseBranch }
     );
 
+    const reviewerIds = params.reviewers && params.reviewers.length > 0
+      ? await this.#resolveUserIds(params.reviewers)
+      : void 0;
+
     const mr = await this.#client.MergeRequests.create(
       params.repoPath,
       params.headBranch,
       params.baseBranch,
       params.prTitle,
-      { description: params.prDescription }
+      {
+        description: params.prDescription,
+        ...(reviewerIds !== void 0 && { reviewerIds })
+      }
     );
 
     return {
       prUrl: String(mr.web_url),
       prTitle: String(mr.title)
     };
+  }
+
+  async listMembers(namespace: string): Promise<Member[]> {
+    const members = await this.#client.GroupMembers.all(namespace);
+
+    return members.map((member) => {
+      return {
+        username: String(member.username),
+        avatarUrl: member.avatar_url ? String(member.avatar_url) : void 0
+      };
+    });
   }
 }

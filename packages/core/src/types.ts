@@ -29,6 +29,7 @@ export interface SubmitParams {
   commitMessage: string;
   prTitle: string;
   prDescription: string;
+  reviewers?: string[];
   files: CommitAction[];
 }
 
@@ -37,10 +38,16 @@ export interface SubmitResult {
   prTitle: string;
 }
 
+export interface Member {
+  username: string;
+  avatarUrl?: string;
+}
+
 export interface ProviderAdapter {
   listRepos(namespace: string): Promise<Repo[]>;
   getFile(repoPath: string, filePath: string, branch: string): Promise<FileContent | null>;
   submitChanges(params: SubmitParams): Promise<SubmitResult>;
+  listMembers(namespace: string): Promise<Member[]>;
 }
 
 export interface Operation {
@@ -49,10 +56,11 @@ export interface Operation {
   readonly commitMessage: string;
   readonly prTitle: string;
   readonly prDescription: string;
+  readonly reviewers: string[];
   apply(content: string): string | null;
 }
 
-export type OperationOverrides = Pick<Operation, "branchName" | "commitMessage" | "prTitle" | "prDescription">;
+export type OperationOverrides = Pick<Operation, "branchName" | "commitMessage" | "prTitle" | "prDescription" | "reviewers">;
 
 export interface RepoDiff {
   repo: Repo;

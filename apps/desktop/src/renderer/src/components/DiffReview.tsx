@@ -1,6 +1,10 @@
+// Import Third-party Dependencies
+import { useState, useRef, useEffect } from "react";
+
 // Import Internal Dependencies
 import { useAppStore } from "../stores/app.js";
 import type { RepoDiff } from "../stores/app.js";
+import type { Member } from "@rezzou/core";
 
 // CONSTANTS
 const kContextLines = 2;
@@ -118,8 +122,121 @@ function DiffCard({ diff }: { diff: RepoDiff; }) {
   );
 }
 
+interface ReviewerSelectProps {
+  members: Member[];
+  isLoading: boolean;
+  selected: string[];
+  onChange: (reviewers: string[]) => void;
+}
+
+function ReviewerSelect({ members, isLoading, selected, onChange }: ReviewerSelectProps) {
+  const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setFilter("");
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const filtered = members.filter((m) => {
+    return !selected.includes(m.username) && m.username.toLowerCase().includes(filter.toLowerCase());
+  });
+
+  function add(username: string) {
+    onChange([...selected, username]);
+    setFilter("");
+  }
+
+  function remove(username: string) {
+    onChange(selected.filter((u) => u !== username));
+  }
+
+  return (
+    <div ref={containerRef} className="relative">
+      <div
+        className="flex min-h-[32px] flex-wrap items-center gap-1 rounded border border-gray-700 bg-gray-800 px-2 py-1 cursor-text focus-within:border-gray-500"
+        onClick={() => setOpen(true)}
+      >
+        {selected.map((username) => {
+          const member = members.find((m) => m.username === username);
+
+          return (
+            <span key={username} className="flex items-center gap-1 rounded bg-gray-700 pl-1 pr-1.5 py-0.5 text-xs text-gray-200">
+              {member?.avatarUrl
+                ? <img src={member.avatarUrl} referrerPolicy="no-referrer" className="h-3.5 w-3.5 rounded-full" alt="" />
+                : <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-gray-600 text-gray-300" style={{ fontSize: "9px" }}>{username[0].toUpperCase()}</span>
+              }
+              {username}
+              <button
+                onClick={(e) => { e.stopPropagation(); remove(username); }}
+                className="ml-0.5 leading-none text-gray-400 hover:text-gray-200"
+              >
+                ×
+              </button>
+            </span>
+          );
+        })}
+        <input
+          type="text"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          onFocus={() => setOpen(true)}
+          placeholder={selected.length === 0 ? "Add reviewers..." : ""}
+          className="min-w-[80px] flex-1 bg-transparent text-xs text-gray-200 focus:outline-none"
+        />
+      </div>
+
+      {open && (
+        <div className="absolute z-10 mt-1 max-h-48 w-full overflow-y-auto rounded border border-gray-700 bg-gray-900 shadow-lg">
+          {isLoading
+            ? <p className="px-3 py-2 text-xs text-gray-500">Loading members...</p>
+            : filtered.length === 0
+              ? <p className="px-3 py-2 text-xs text-gray-500">{filter ? "No match" : "All members added"}</p>
+              : filtered.map((member) => (
+                <button
+                  key={member.username}
+                  onClick={() => add(member.username)}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-gray-200 hover:bg-gray-800"
+                >
+                  {member.avatarUrl
+                    ? <img src={member.avatarUrl} referrerPolicy="no-referrer" className="h-5 w-5 flex-shrink-0 rounded-full" alt="" />
+                    : <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-gray-700 text-gray-400 text-[10px]">{member.username[0].toUpperCase()}</span>
+                  }
+                  {member.username}
+                </button>
+              ))
+          }
+        </div>
+      )}
+    </div>
+  );
+}
+
 function OperationForm() {
-  const { operationOverrides, setOperationOverrides } = useAppStore();
+  const { operationOverrides, setOperationOverrides, groupPath, namespaceType } = useAppStore();
+  const [members, setMembers] = useState<Member[]>([]);
+  const [isFetchingMembers, setIsFetchingMembers] = useState(false);
+
+  useEffect(() => {
+    if (namespaceType !== "org" || !groupPath) {
+      return;
+    }
+
+    setIsFetchingMembers(true);
+    window.api.fetchMembers(groupPath)
+      .then(setMembers)
+      .catch(() => setMembers([]))
+      .finally(() => setIsFetchingMembers(false));
+  }, [groupPath, namespaceType]);
 
   return (
     <div className="mb-6 rounded-lg border border-gray-800 bg-gray-900 p-4">
@@ -161,6 +278,17 @@ function OperationForm() {
             className="rounded border border-gray-700 bg-gray-800 px-3 py-1.5 text-xs text-gray-200 focus:border-gray-500 focus:outline-none"
           />
         </div>
+        {namespaceType === "org" && (
+          <div className="col-span-2 flex flex-col gap-1">
+            <label className="text-xs text-gray-500">Reviewers <span className="text-gray-600">(optional)</span></label>
+            <ReviewerSelect
+              members={members}
+              isLoading={isFetchingMembers}
+              selected={operationOverrides.reviewers}
+              onChange={(reviewers) => setOperationOverrides({ reviewers })}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

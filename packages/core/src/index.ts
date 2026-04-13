@@ -7,6 +7,7 @@ export type {
   SubmitParams,
   SubmitResult,
   ProviderAdapter,
+  Member,
   Operation,
   OperationOverrides,
   RepoDiff

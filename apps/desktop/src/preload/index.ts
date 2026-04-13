@@ -1,6 +1,6 @@
 // Import Third-party Dependencies
 import { contextBridge, ipcRenderer } from "electron";
-import type { Repo, RepoDiff, SubmitResult, Provider, NamespaceType, OperationOverrides } from "@rezzou/core";
+import type { Repo, RepoDiff, SubmitResult, Provider, NamespaceType, OperationOverrides, Member } from "@rezzou/core";
 
 contextBridge.exposeInMainWorld("versions", {
   electron: process.versions.electron,
@@ -19,5 +19,7 @@ contextBridge.exposeInMainWorld("api", {
   applyDiff: (
     diff: RepoDiff,
     overrides: OperationOverrides
-  ): Promise<SubmitResult> => ipcRenderer.invoke("engine:applyDiff", { diff, overrides })
+  ): Promise<SubmitResult> => ipcRenderer.invoke("engine:applyDiff", { diff, overrides }),
+
+  fetchMembers: (namespace: string): Promise<Member[]> => ipcRenderer.invoke("engine:fetchMembers", namespace)
 });

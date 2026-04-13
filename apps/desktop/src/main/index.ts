@@ -7,7 +7,7 @@ import { app, BrowserWindow, shell, ipcMain, safeStorage } from "electron";
 import type { Repo, RepoDiff, ProviderAdapter, Provider, NamespaceType, OperationOverrides } from "@rezzou/core";
 
 // Import Internal Dependencies
-import { handleConnect, handleScanRepos, handleApplyDiff } from "./handlers.ts";
+import { handleConnect, handleScanRepos, handleApplyDiff, handleFetchMembers } from "./handlers.ts";
 
 interface ConnectOptions {
   token: string;
@@ -88,6 +88,14 @@ app.whenReady().then(() => {
     }
 
     return handleApplyDiff(currentAdapter, diff, overrides).catch(toError);
+  });
+
+  ipcMain.handle("engine:fetchMembers", async(_event, namespace: string) => {
+    if (currentAdapter === null) {
+      throw new Error("Not connected");
+    }
+
+    return handleFetchMembers(currentAdapter, namespace).catch(toError);
   });
 
   createWindow();

@@ -15,6 +15,9 @@ const mockMrCreate = mock.fn(async() => {
   return { web_url: "", title: "" };
 });
 
+const mockUsersAll = mock.fn(async() => ([] as unknown[]));
+const mockGroupMembersAll = mock.fn(async() => ([] as unknown[]));
+
 mock.module("@gitbeaker/rest", {
   namedExports: {
     Gitlab: mock.fn(function MockGitlab() {
@@ -22,7 +25,9 @@ mock.module("@gitbeaker/rest", {
         Groups: { allProjects: mockAllProjects },
         RepositoryFiles: { show: mockShow },
         Commits: { create: mockCommitsCreate },
-        MergeRequests: { create: mockMrCreate }
+        MergeRequests: { create: mockMrCreate },
+        Users: { all: mockUsersAll },
+        GroupMembers: { all: mockGroupMembersAll }
       };
     })
   }
@@ -30,12 +35,14 @@ mock.module("@gitbeaker/rest", {
 
 const { GitLabAdapter } = await import("../gitlab.ts");
 
-describe("UT GitLabAdapter", () => {
+describe("GitLabAdapter", () => {
   beforeEach(() => {
     mockAllProjects.mock.resetCalls();
     mockShow.mock.resetCalls();
     mockCommitsCreate.mock.resetCalls();
     mockMrCreate.mock.resetCalls();
+    mockUsersAll.mock.resetCalls();
+    mockGroupMembersAll.mock.resetCalls();
   });
 
   describe("listRepos", () => {
@@ -214,6 +221,83 @@ describe("UT GitLabAdapter", () => {
         "chore: update license year",
         { description: "Automated update" }
       ]);
+    });
+
+    it("should pass reviewerIds when reviewers are provided", async() => {
+      mockCommitsCreate.mock.mockImplementation(async() => undefined);
+      mockMrCreate.mock.mockImplementation(async() => {
+        return { web_url: "", title: "" };
+      });
+      mockUsersAll.mock.mockImplementation(async() => [{ username: "john", id: 42 }]);
+
+      const adapter = new GitLabAdapter(kToken);
+      await adapter.submitChanges({
+        repoPath: "ns/repo",
+        baseBranch: "main",
+        headBranch: "rezzou/update",
+        commitMessage: "chore: update",
+        prTitle: "chore: update",
+        prDescription: "desc",
+        reviewers: ["john"],
+        files: []
+      });
+
+      assert.equal(mockMrCreate.mock.callCount(), 1);
+      assert.deepEqual(mockMrCreate.mock.calls[0].arguments, [
+        "ns/repo",
+        "rezzou/update",
+        "main",
+        "chore: update",
+        { description: "desc", reviewerIds: [42] }
+      ]);
+    });
+
+    it("should throw when a reviewer username is not found", async() => {
+      mockCommitsCreate.mock.mockImplementation(async() => undefined);
+      mockUsersAll.mock.mockImplementation(async() => []);
+
+      const adapter = new GitLabAdapter(kToken);
+
+      await assert.rejects(
+        () => adapter.submitChanges({
+          repoPath: "ns/repo",
+          baseBranch: "main",
+          headBranch: "rezzou/update",
+          commitMessage: "chore: update",
+          prTitle: "chore: update",
+          prDescription: "desc",
+          reviewers: ["ghost"],
+          files: []
+        }),
+        { message: "Unknown reviewer: ghost" }
+      );
+    });
+  });
+
+  describe("listMembers", () => {
+    it("should return mapped group members", async() => {
+      mockGroupMembersAll.mock.mockImplementation(async() => [
+        { username: "john", avatar_url: "https://gitlab.com/uploads/john/avatar.png" },
+        { username: "bob", avatar_url: undefined }
+      ]);
+
+      const adapter = new GitLabAdapter(kToken);
+      const result = await adapter.listMembers("my-group");
+
+      assert.deepEqual(result, [
+        { username: "john", avatarUrl: "https://gitlab.com/uploads/john/avatar.png" },
+        { username: "bob", avatarUrl: undefined }
+      ]);
+    });
+
+    it("should call GroupMembers.all with the namespace", async() => {
+      mockGroupMembersAll.mock.mockImplementation(async() => []);
+
+      const adapter = new GitLabAdapter(kToken);
+      await adapter.listMembers("my-group");
+
+      assert.equal(mockGroupMembersAll.mock.callCount(), 1);
+      assert.deepEqual(mockGroupMembersAll.mock.calls[0].arguments, ["my-group"]);
     });
   });
 });
