@@ -38,6 +38,13 @@ mock.module("@rezzou/providers", {
         getFile: mockGetFile,
         submitChanges: mockSubmitChanges
       };
+    }),
+    GitHubAdapter: mock.fn(function MockGitHubAdapter() {
+      return {
+        listRepos: mockListRepos,
+        getFile: mockGetFile,
+        submitChanges: mockSubmitChanges
+      };
     })
   }
 });
@@ -80,10 +87,10 @@ describe("handleConnect", () => {
     mockListRepos.mock.resetCalls();
   });
 
-  it("should call listRepos with the given groupPath and return repos + adapter", async() => {
+  it("should create a GitLabAdapter and return repos for gitlab provider", async() => {
     mockListRepos.mock.mockImplementation(async() => [kRepo]);
 
-    const result = await handleConnect(kToken, "ns");
+    const result = await handleConnect(kToken, "ns", { provider: "gitlab", namespaceType: "org" });
 
     assert.equal(mockListRepos.mock.callCount(), 1);
     assert.deepEqual(mockListRepos.mock.calls[0].arguments, ["ns"]);
@@ -91,10 +98,21 @@ describe("handleConnect", () => {
     assert.ok(result.adapter !== null);
   });
 
-  it("should return an empty repos array when the group has no repos", async() => {
+  it("should create a GitHubAdapter and return repos for github provider", async() => {
+    mockListRepos.mock.mockImplementation(async() => [kRepo]);
+
+    const result = await handleConnect(kToken, "my-org", { provider: "github", namespaceType: "org" });
+
+    assert.equal(mockListRepos.mock.callCount(), 1);
+    assert.deepEqual(mockListRepos.mock.calls[0].arguments, ["my-org"]);
+    assert.deepEqual(result.repos, [kRepo]);
+    assert.ok(result.adapter !== null);
+  });
+
+  it("should return an empty repos array when the namespace has no repos", async() => {
     mockListRepos.mock.mockImplementation(async() => []);
 
-    const result = await handleConnect(kToken, "empty-ns");
+    const result = await handleConnect(kToken, "empty-ns", { provider: "gitlab", namespaceType: "org" });
 
     assert.deepEqual(result.repos, []);
   });

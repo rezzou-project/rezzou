@@ -4,7 +4,14 @@ import * as fs from "node:fs";
 
 // Import Third-party Dependencies
 import { app, BrowserWindow, shell, ipcMain, safeStorage } from "electron";
-import type { Repo, RepoDiff, ProviderAdapter } from "@rezzou/core";
+import type { Repo, RepoDiff, ProviderAdapter, Provider, NamespaceType } from "@rezzou/core";
+
+interface ConnectOptions {
+  token: string;
+  groupPath: string;
+  provider: Provider;
+  namespaceType: NamespaceType;
+}
 
 // Import Internal Dependencies
 import { handleConnect, handleScanRepos, handleApplyDiff } from "./handlers.ts";
@@ -51,8 +58,15 @@ function toError(err: unknown): never {
 }
 
 app.whenReady().then(() => {
-  ipcMain.handle("auth:connect", async(_event, token: string, groupPath: string): Promise<Repo[]> => {
-    const { adapter, repos } = await handleConnect(token, groupPath).catch(toError);
+  ipcMain.handle("auth:connect", async(_event, options: ConnectOptions): Promise<Repo[]> => {
+    const {
+      token,
+      groupPath,
+      provider,
+      namespaceType
+    } = options;
+
+    const { adapter, repos } = await handleConnect(token, groupPath, { provider, namespaceType }).catch(toError);
 
     currentAdapter = adapter;
     saveToken(token);

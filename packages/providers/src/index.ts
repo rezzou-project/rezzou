@@ -8,3 +8,4 @@ export type {
 } from "@rezzou/core";
 export { BaseProvider } from "./base.ts";
 export { GitLabAdapter } from "./gitlab.ts";
+export { GitHubAdapter } from "./github.ts";

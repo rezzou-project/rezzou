@@ -1,3 +1,6 @@
+export type Provider = "gitlab" | "github";
+export type NamespaceType = "org" | "user";
+
 export interface Repo {
   id: string;
   name: string;

@@ -1,6 +1,6 @@
 // Import Third-party Dependencies
 import { create } from "zustand";
-import type { Repo, RepoDiff as BaseRepoDiff, SubmitResult } from "@rezzou/core";
+import type { Provider, NamespaceType, Repo, RepoDiff as BaseRepoDiff, SubmitResult } from "@rezzou/core";
 
 type Step = "connect" | "repos" | "diffs" | "results";
 
@@ -28,6 +28,8 @@ export interface RepoDiff extends BaseRepoDiff {
 
 interface AppState {
   step: Step;
+  provider: Provider;
+  namespaceType: NamespaceType;
   groupPath: string;
   repos: Repo[];
   selectedRepoIds: string[];
@@ -37,7 +39,7 @@ interface AppState {
 }
 
 interface AppActions {
-  connect: (token: string, groupPath: string) => Promise<void>;
+  connect: (token: string, groupPath: string, options: { provider: Provider; namespaceType: NamespaceType; }) => Promise<void>;
   toggleRepo: (id: string) => void;
   selectAll: () => void;
   deselectAll: () => void;
@@ -49,6 +51,8 @@ interface AppActions {
 
 const kInitialState: AppState = {
   step: "connect",
+  provider: "gitlab",
+  namespaceType: "org",
   groupPath: "",
   repos: [],
   selectedRepoIds: [],
@@ -61,14 +65,16 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
   return {
     ...kInitialState,
 
-    connect: async(token: string, groupPath: string) => {
+    connect: async(token: string, groupPath: string, options: { provider: Provider; namespaceType: NamespaceType; }) => {
       set({ isLoading: true, error: null });
 
       try {
-        const repos = await window.api.connect(token, groupPath);
+        const repos = await window.api.connect(token, groupPath, options);
 
         set({
           step: "repos",
+          provider: options.provider,
+          namespaceType: options.namespaceType,
           groupPath,
           repos,
           selectedRepoIds: repos.map((repo) => repo.id),
@@ -78,7 +84,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
       catch (connectError) {
         set({
           isLoading: false,
-          error: ipcErrorMessage(connectError, "Failed to connect to GitLab")
+          error: ipcErrorMessage(connectError, "Failed to connect")
         });
       }
     },
@@ -153,7 +159,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
           updatedDiffs[diffIndex] = {
             ...diff,
             applyStatus: applyStatus.Error,
-            error: ipcErrorMessage(applyError, "Failed to create MR")
+            error: ipcErrorMessage(applyError, "Failed to create PR")
           };
 
           return { diffs: updatedDiffs };

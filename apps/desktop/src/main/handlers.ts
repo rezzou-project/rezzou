@@ -1,17 +1,30 @@
 // Import Third-party Dependencies
-import { GitLabAdapter } from "@rezzou/providers";
+import { GitLabAdapter, GitHubAdapter } from "@rezzou/providers";
 import { licenseYearOperation } from "@rezzou/operations";
 import {
   scanRepos,
   applyRepoDiff,
+  type Provider,
+  type NamespaceType,
   type Repo,
   type RepoDiff,
   type SubmitResult,
   type ProviderAdapter
 } from "@rezzou/core";
 
-export async function handleConnect(token: string, groupPath: string): Promise<{ adapter: ProviderAdapter; repos: Repo[]; }> {
-  const adapter = new GitLabAdapter(token);
+interface ProviderOptions {
+  provider: Provider;
+  namespaceType: NamespaceType;
+}
+
+export async function handleConnect(
+  token: string,
+  groupPath: string,
+  { provider, namespaceType }: ProviderOptions
+): Promise<{ adapter: ProviderAdapter; repos: Repo[]; }> {
+  const adapter = provider === "github"
+    ? new GitHubAdapter(token, namespaceType)
+    : new GitLabAdapter(token);
   const repos = await adapter.listRepos(groupPath);
 
   return { adapter, repos };

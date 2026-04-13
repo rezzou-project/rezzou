@@ -54,7 +54,7 @@ describe("connect", () => {
   it("should transition to repos step and store repos on success", async() => {
     mockApiConnect.mock.mockImplementation(async() => [kRepo]);
 
-    await getState().connect("token", "ns");
+    await getState().connect("token", "ns", { provider: "gitlab", namespaceType: "org" });
 
     const state = getState();
     assert.equal(state.step, "repos");
@@ -69,7 +69,7 @@ describe("connect", () => {
     const repoB: Repo = { ...kRepo, id: "2" };
     mockApiConnect.mock.mockImplementation(async() => [repoA, repoB]);
 
-    await getState().connect("token", "ns");
+    await getState().connect("token", "ns", { provider: "gitlab", namespaceType: "org" });
 
     assert.deepEqual(getState().selectedRepoIds, ["1", "2"]);
   });
@@ -79,7 +79,7 @@ describe("connect", () => {
       throw new Error("Unauthorized");
     });
 
-    await getState().connect("bad-token", "ns");
+    await getState().connect("bad-token", "ns", { provider: "gitlab", namespaceType: "org" });
 
     const state = getState();
     assert.equal(state.step, "connect");
@@ -90,17 +90,24 @@ describe("connect", () => {
   it("should call window.api.connect with token and groupPath", async() => {
     mockApiConnect.mock.mockImplementation(async() => []);
 
-    await getState().connect("my-token", "my-org");
+    await getState().connect("my-token", "my-org", { provider: "gitlab", namespaceType: "org" });
 
     assert.equal(mockApiConnect.mock.callCount(), 1);
-    assert.deepEqual(mockApiConnect.mock.calls[0].arguments, ["my-token", "my-org"]);
+    assert.deepEqual(
+      mockApiConnect.mock.calls[0].arguments,
+      [
+        "my-token",
+        "my-org",
+        { provider: "gitlab", namespaceType: "org" }
+      ]
+    );
   });
 });
 
 describe("toggleRepo", () => {
   beforeEach(async() => {
     mockApiConnect.mock.mockImplementation(async() => [kRepo]);
-    await getState().connect("token", "ns");
+    await getState().connect("token", "ns", { provider: "gitlab", namespaceType: "org" });
   });
 
   it("should deselect a selected repo", () => {
@@ -123,7 +130,7 @@ describe("selectAll / deselectAll", () => {
 
   beforeEach(async() => {
     mockApiConnect.mock.mockImplementation(async() => [repoA, repoB]);
-    await getState().connect("token", "ns");
+    await getState().connect("token", "ns", { provider: "gitlab", namespaceType: "org" });
   });
 
   it("should deselect all repos", () => {
@@ -143,7 +150,7 @@ describe("selectAll / deselectAll", () => {
 describe("scanRepos", () => {
   beforeEach(async() => {
     mockApiConnect.mock.mockImplementation(async() => [kRepo]);
-    await getState().connect("token", "ns");
+    await getState().connect("token", "ns", { provider: "gitlab", namespaceType: "org" });
   });
 
   it("should transition to diffs step with returned diffs", async() => {
@@ -162,7 +169,7 @@ describe("scanRepos", () => {
     const repoA: Repo = { ...kRepo, id: "1" };
     const repoB: Repo = { ...kRepo, id: "2" };
     mockApiConnect.mock.mockImplementation(async() => [repoA, repoB]);
-    await getState().connect("token", "ns");
+    await getState().connect("token", "ns", { provider: "gitlab", namespaceType: "org" });
 
     getState().toggleRepo("2");
     mockApiScanRepos.mock.mockImplementation(async() => []);
@@ -177,7 +184,7 @@ describe("scanRepos", () => {
 describe("applyDiff", () => {
   beforeEach(async() => {
     mockApiConnect.mock.mockImplementation(async() => [kRepo]);
-    await getState().connect("token", "ns");
+    await getState().connect("token", "ns", { provider: "gitlab", namespaceType: "org" });
     mockApiScanRepos.mock.mockImplementation(async() => [kDiff]);
     await getState().scanRepos();
   });
@@ -219,7 +226,7 @@ describe("applyAll", () => {
     const diffB: RepoDiff = { ...kDiff, repo: repoB };
 
     mockApiConnect.mock.mockImplementation(async() => [repoA, repoB]);
-    await getState().connect("token", "ns");
+    await getState().connect("token", "ns", { provider: "gitlab", namespaceType: "org" });
     mockApiScanRepos.mock.mockImplementation(async() => [diffA, diffB]);
     await getState().scanRepos();
     mockApiApplyDiff.mock.mockImplementation(async() => kSubmitResult);
@@ -232,7 +239,7 @@ describe("applyAll", () => {
 
   it("should skip diffs that are not pending", async() => {
     mockApiConnect.mock.mockImplementation(async() => [kRepo]);
-    await getState().connect("token", "ns");
+    await getState().connect("token", "ns", { provider: "gitlab", namespaceType: "org" });
     mockApiScanRepos.mock.mockImplementation(async() => [kDiff]);
     await getState().scanRepos();
 
@@ -249,7 +256,7 @@ describe("applyAll", () => {
 describe("reset", () => {
   it("should restore initial state", async() => {
     mockApiConnect.mock.mockImplementation(async() => [kRepo]);
-    await getState().connect("token", "ns");
+    await getState().connect("token", "ns", { provider: "gitlab", namespaceType: "org" });
 
     getState().reset();
 

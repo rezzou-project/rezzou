@@ -30,6 +30,7 @@
   },
   "dependencies": {
     "@gitbeaker/rest": "^43.8.0",
+    "@octokit/rest": "^22.0.1",
     "@rezzou/core": "*"
   }
 }
