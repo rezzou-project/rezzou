@@ -22,7 +22,7 @@ const mockGetBranch = mock.fn(async() => {
 });
 
 const mockCreateRef = mock.fn(async() => void 0);
-const mockCreateOrUpdateFileContents = mock.fn(async() => void 0);
+const mockRequest = mock.fn(async() => void 0);
 
 const mockPullsCreate = mock.fn(async() => {
   return { data: { html_url: "", title: "" } };
@@ -36,12 +36,12 @@ mock.module("@octokit/rest", {
           listForOrg: mockListForOrg,
           listForUser: mockListForUser,
           getContent: mockGetContent,
-          getBranch: mockGetBranch,
-          createOrUpdateFileContents: mockCreateOrUpdateFileContents
+          getBranch: mockGetBranch
         },
         git: {
           createRef: mockCreateRef
         },
+        request: mockRequest,
         pulls: {
           create: mockPullsCreate
         }
@@ -59,7 +59,7 @@ describe("GitHubAdapter", () => {
     mockGetContent.mock.resetCalls();
     mockGetBranch.mock.resetCalls();
     mockCreateRef.mock.resetCalls();
-    mockCreateOrUpdateFileContents.mock.resetCalls();
+    mockRequest.mock.resetCalls();
     mockPullsCreate.mock.resetCalls();
   });
 
@@ -227,12 +227,7 @@ describe("GitHubAdapter", () => {
         };
       });
       mockCreateRef.mock.mockImplementation(async() => undefined);
-      mockGetContent.mock.mockImplementation(async() => {
-        return {
-          data: { type: "file", content: "", sha: "file-sha" }
-        };
-      });
-      mockCreateOrUpdateFileContents.mock.mockImplementation(async() => undefined);
+      mockRequest.mock.mockImplementation(async() => undefined);
       mockPullsCreate.mock.mockImplementation(async() => {
         return {
           data: {
@@ -268,18 +263,27 @@ describe("GitHubAdapter", () => {
       ]);
     });
 
-    it("should commit files with base64-encoded content", async() => {
+    it("should commit all files in a single signed GraphQL commit", async() => {
       const adapter = new GitHubAdapter(kToken, "org");
       await adapter.submitChanges(kParams);
 
-      assert.equal(mockCreateOrUpdateFileContents.mock.callCount(), 1);
-      const [callArgs] = mockCreateOrUpdateFileContents.mock.calls[0].arguments as Record<string, unknown>[];
-      assert.equal(callArgs.owner, "owner");
-      assert.equal(callArgs.repo, "repo");
-      assert.equal(callArgs.path, "LICENSE");
-      assert.equal(callArgs.content, Buffer.from("MIT License 2026").toString("base64"));
-      assert.equal(callArgs.branch, "rezzou/license-year-2026");
-      assert.equal(callArgs.sha, "file-sha");
+      assert.equal(mockRequest.mock.callCount(), 1);
+      const [endpoint, options] = mockRequest.mock.calls[0].arguments as unknown as [string, Record<string, unknown>];
+      assert.equal(endpoint, "POST /graphql");
+      assert.deepEqual((options.variables as Record<string, unknown>).input, {
+        branch: {
+          repositoryNameWithOwner: "owner/repo",
+          branchName: "rezzou/license-year-2026"
+        },
+        message: { headline: "chore: update license year" },
+        fileChanges: {
+          additions: [
+            { path: "LICENSE", contents: Buffer.from("MIT License 2026").toString("base64") }
+          ],
+          deletions: []
+        },
+        expectedHeadOid: "base-sha"
+      });
     });
 
     it("should create a PR targeting the base branch", async() => {
