@@ -1,6 +1,9 @@
 // Import Third-party Dependencies
 import { create } from "zustand";
-import type { Provider, NamespaceType, Repo, RepoDiff as BaseRepoDiff, SubmitResult } from "@rezzou/core";
+import type { Provider, NamespaceType, Repo, RepoDiff as BaseRepoDiff, SubmitResult, OperationOverrides } from "@rezzou/core";
+
+// Import Internal Dependencies
+import { licenseYearOperation } from "@rezzou/operations";
 
 type Step = "connect" | "repos" | "diffs" | "results";
 
@@ -34,6 +37,7 @@ interface AppState {
   repos: Repo[];
   selectedRepoIds: string[];
   diffs: RepoDiff[];
+  operationOverrides: OperationOverrides;
   isLoading: boolean;
   error: string | null;
 }
@@ -44,6 +48,7 @@ interface AppActions {
   selectAll: () => void;
   deselectAll: () => void;
   scanRepos: () => Promise<void>;
+  setOperationOverrides: (overrides: Partial<OperationOverrides>) => void;
   applyDiff: (repoPath: string) => Promise<void>;
   applyAll: () => Promise<void>;
   reset: () => void;
@@ -57,6 +62,12 @@ const kInitialState: AppState = {
   repos: [],
   selectedRepoIds: [],
   diffs: [],
+  operationOverrides: {
+    branchName: licenseYearOperation.branchName,
+    commitMessage: licenseYearOperation.commitMessage,
+    prTitle: licenseYearOperation.prTitle,
+    prDescription: licenseYearOperation.prDescription
+  },
   isLoading: false,
   error: null
 };
@@ -109,6 +120,12 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
       set({ selectedRepoIds: [] });
     },
 
+    setOperationOverrides: (overrides: Partial<OperationOverrides>) => {
+      set((state) => {
+        return { operationOverrides: { ...state.operationOverrides, ...overrides } };
+      });
+    },
+
     scanRepos: async() => {
       const { repos, selectedRepoIds } = get();
 
@@ -127,7 +144,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
     },
 
     applyDiff: async(repoPath: string) => {
-      const { diffs } = get();
+      const { diffs, operationOverrides } = get();
 
       const diffIndex = diffs.findIndex((diff) => diff.repo.fullPath === repoPath);
       if (diffIndex === -1) {
@@ -144,7 +161,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
       });
 
       try {
-        const result: SubmitResult = await window.api.applyDiff(diff);
+        const result: SubmitResult = await window.api.applyDiff(diff, operationOverrides);
 
         set((state) => {
           const updatedDiffs = [...state.diffs];

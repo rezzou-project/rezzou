@@ -9,7 +9,8 @@ import {
   type Repo,
   type RepoDiff,
   type SubmitResult,
-  type ProviderAdapter
+  type ProviderAdapter,
+  type OperationOverrides
 } from "@rezzou/core";
 
 interface ProviderOptions {
@@ -34,6 +35,10 @@ export async function handleScanRepos(adapter: ProviderAdapter, repos: Repo[]): 
   return scanRepos(adapter, repos, licenseYearOperation);
 }
 
-export async function handleApplyDiff(adapter: ProviderAdapter, diff: RepoDiff): Promise<SubmitResult> {
-  return applyRepoDiff(adapter, diff, licenseYearOperation);
+export async function handleApplyDiff(
+  adapter: ProviderAdapter,
+  diff: RepoDiff,
+  overrides: OperationOverrides
+): Promise<SubmitResult> {
+  return applyRepoDiff(adapter, diff, { ...licenseYearOperation, ...overrides });
 }

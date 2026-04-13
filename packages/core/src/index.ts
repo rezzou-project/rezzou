@@ -8,6 +8,7 @@ export type {
   SubmitResult,
   ProviderAdapter,
   Operation,
+  OperationOverrides,
   RepoDiff
 } from "./types.ts";
 export { scanRepos, applyRepoDiff } from "./engine.ts";
