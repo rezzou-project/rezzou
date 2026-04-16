@@ -48,16 +48,22 @@ export async function handleLoadRepos(
   return adapter.listRepos(namespace);
 }
 
-export async function handleScanRepos(adapter: ProviderAdapter, repos: Repo[]): Promise<RepoDiff[]> {
-  return scanRepos(adapter, repos, getOperation("license-year"));
+export async function handleScanRepos(adapter: ProviderAdapter, repos: Repo[], operationId: string): Promise<RepoDiff[]> {
+  return scanRepos(adapter, repos, getOperation(operationId));
+}
+
+export interface ApplyDiffOptions {
+  diff: RepoDiff;
+  overrides: OperationOverrides;
+  operationId: string;
 }
 
 export async function handleApplyDiff(
   adapter: ProviderAdapter,
-  diff: RepoDiff,
-  overrides: OperationOverrides
+  options: ApplyDiffOptions
 ): Promise<SubmitResult> {
-  const operation = getOperation("license-year");
+  const { diff, overrides, operationId } = options;
+  const operation = getOperation(operationId);
 
   return applyRepoDiff(adapter, diff, { ...operation, ...overrides });
 }

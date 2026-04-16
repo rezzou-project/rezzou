@@ -4,7 +4,7 @@ import * as fs from "node:fs";
 
 // Import Third-party Dependencies
 import { app, BrowserWindow, shell, ipcMain, safeStorage } from "electron";
-import type { Repo, RepoDiff, ProviderAdapter, Provider, OperationOverrides, Namespace } from "@rezzou/core";
+import type { Repo, RepoDiff, ProviderAdapter, Provider, Namespace } from "@rezzou/core";
 
 // Import Internal Dependencies
 import {
@@ -16,12 +16,18 @@ import {
   handleGitHubDeviceStart,
   handleGitHubDevicePoll,
   handleGitLabOAuthStart,
-  handleGitLabOAuthCallback
+  handleGitLabOAuthCallback,
+  type ApplyDiffOptions
 } from "./handlers.ts";
 
 interface AuthenticateOptions {
   token: string;
   provider: Provider;
+}
+
+interface ScanReposPayload {
+  repos: Repo[];
+  operationId: string;
 }
 
 // CONSTANTS
@@ -217,20 +223,22 @@ app.whenReady().then(() => {
     return handleLoadRepos(currentAdapter, namespace).catch(toError);
   });
 
-  ipcMain.handle("engine:scanRepos", async(_event, repos: Repo[]): Promise<RepoDiff[]> => {
+  ipcMain.handle("engine:scanRepos", async(_event, payload: ScanReposPayload): Promise<RepoDiff[]> => {
+    const { repos, operationId } = payload;
     if (currentAdapter === null) {
       throw new Error("Not connected");
     }
 
-    return handleScanRepos(currentAdapter, repos).catch(toError);
+    return handleScanRepos(currentAdapter, repos, operationId).catch(toError);
   });
 
-  ipcMain.handle("engine:applyDiff", async(_event, { diff, overrides }: { diff: RepoDiff; overrides: OperationOverrides; }) => {
+  ipcMain.handle("engine:applyDiff", async(_event, payload: ApplyDiffOptions) => {
+    const { diff, overrides, operationId } = payload;
     if (currentAdapter === null) {
       throw new Error("Not connected");
     }
 
-    return handleApplyDiff(currentAdapter, diff, overrides).catch(toError);
+    return handleApplyDiff(currentAdapter, { diff, overrides, operationId }).catch(toError);
   });
 
   ipcMain.handle("engine:fetchMembers", async(_event, namespace: string) => {

@@ -97,9 +97,11 @@ mock.module("@rezzou/operations", {
   }
 });
 
+const mockGetOperation = mock.fn((_id: string) => kMockOperation);
+
 mock.module("../operation-registry.ts", {
   namedExports: {
-    getOperation: mock.fn(() => kMockOperation)
+    getOperation: mockGetOperation
   }
 });
 
@@ -193,13 +195,14 @@ describe("handleLoadRepos", () => {
 describe("handleScanRepos", () => {
   beforeEach(() => {
     mockScanRepos.mock.resetCalls();
+    mockGetOperation.mock.resetCalls();
   });
 
   it("should call scanRepos with the given adapter and return the result", async() => {
     const diffs: RepoDiff[] = [kDiff];
     mockScanRepos.mock.mockImplementation(async() => diffs);
 
-    const result = await handleScanRepos(kMockAdapter, [kRepo]);
+    const result = await handleScanRepos(kMockAdapter, [kRepo], "license-year");
 
     assert.equal(mockScanRepos.mock.callCount(), 1);
     assert.deepEqual(result, diffs);
@@ -208,22 +211,32 @@ describe("handleScanRepos", () => {
   it("should pass the provided repos to scanRepos", async() => {
     mockScanRepos.mock.mockImplementation(async() => []);
 
-    await handleScanRepos(kMockAdapter, [kRepo]);
+    await handleScanRepos(kMockAdapter, [kRepo], "license-year");
 
     const [, repos] = mockScanRepos.mock.calls[0].arguments;
     assert.deepEqual(repos, [kRepo]);
+  });
+
+  it("should resolve the operation from registry using operationId", async() => {
+    mockScanRepos.mock.mockImplementation(async() => []);
+
+    await handleScanRepos(kMockAdapter, [kRepo], "gitignore");
+
+    assert.equal(mockGetOperation.mock.callCount(), 1);
+    assert.equal(mockGetOperation.mock.calls[0].arguments[0], "gitignore");
   });
 });
 
 describe("handleApplyDiff", () => {
   beforeEach(() => {
     mockApplyRepoDiff.mock.resetCalls();
+    mockGetOperation.mock.resetCalls();
   });
 
   it("should call applyRepoDiff with the given adapter and return the result", async() => {
     mockApplyRepoDiff.mock.mockImplementation(async() => kSubmitResult);
 
-    const result = await handleApplyDiff(kMockAdapter, kDiff, kOverrides);
+    const result = await handleApplyDiff(kMockAdapter, { diff: kDiff, overrides: kOverrides, operationId: "license-year" });
 
     assert.equal(mockApplyRepoDiff.mock.callCount(), 1);
     assert.deepEqual(result, kSubmitResult);
@@ -232,10 +245,19 @@ describe("handleApplyDiff", () => {
   it("should pass the provided diff to applyRepoDiff", async() => {
     mockApplyRepoDiff.mock.mockImplementation(async() => kSubmitResult);
 
-    await handleApplyDiff(kMockAdapter, kDiff, kOverrides);
+    await handleApplyDiff(kMockAdapter, { diff: kDiff, overrides: kOverrides, operationId: "license-year" });
 
     const [, diff] = mockApplyRepoDiff.mock.calls[0].arguments;
     assert.deepEqual(diff, kDiff);
+  });
+
+  it("should resolve the operation from registry using operationId", async() => {
+    mockApplyRepoDiff.mock.mockImplementation(async() => kSubmitResult);
+
+    await handleApplyDiff(kMockAdapter, { diff: kDiff, overrides: kOverrides, operationId: "gitignore" });
+
+    assert.equal(mockGetOperation.mock.callCount(), 1);
+    assert.equal(mockGetOperation.mock.calls[0].arguments[0], "gitignore");
   });
 });
 
