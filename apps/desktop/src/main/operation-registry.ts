@@ -1,15 +1,18 @@
 // Import Third-party Dependencies
-import { licenseYearOperation } from "@rezzou/operations";
+import { licenseYearOperation, gitignoreMaintainerOperation, editorConfigOperation } from "@rezzou/operations";
 import type { Operation } from "@rezzou/core";
 
 export const OPERATION_REGISTRY: Map<string, Operation> = new Map([
-  ["license-year", licenseYearOperation]
+  ["license-year", licenseYearOperation],
+  ["gitignore-maintainer", gitignoreMaintainerOperation],
+  ["editorconfig", editorConfigOperation]
 ]);
 
 export interface OperationInfo {
   id: string;
   name: string;
   description: string;
+  filePath: string;
 }
 
 export function listOperations(): OperationInfo[] {
@@ -17,7 +20,8 @@ export function listOperations(): OperationInfo[] {
     return {
       id,
       name: op.name,
-      description: op.description
+      description: op.description,
+      filePath: op.filePath
     };
   });
 }

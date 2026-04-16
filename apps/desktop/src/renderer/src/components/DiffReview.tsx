@@ -292,17 +292,39 @@ function OperationForm() {
   );
 }
 
+interface OperationInfo {
+  id: string;
+  name: string;
+  description: string;
+  filePath: string;
+}
+
 export function DiffReview() {
-  const { diffs, applyAll } = useAppStore();
+  const { diffs, applyAll, backToPickOperation, selectedOperationId } = useAppStore();
+  const [selectedOp, setSelectedOp] = useState<OperationInfo | null>(null);
   const pendingCount = diffs.filter((diff) => diff.applyStatus === "pending").length;
   const doneCount = diffs.filter((diff) => diff.applyStatus === "done").length;
   const isApplying = diffs.some((diff) => diff.applyStatus === "applying");
   const isConfigurable = doneCount === 0 && !isApplying;
 
+  useEffect(() => {
+    void window.api.listOperations().then((ops) => {
+      setSelectedOp(ops.find((op) => op.id === selectedOperationId) ?? null);
+    });
+  }, [selectedOperationId]);
+
   if (diffs.length === 0) {
     return (
       <div className="pt-20 text-center">
-        <p className="text-gray-400">No LICENSE files need updating.</p>
+        <p className="mb-4 text-gray-400">
+          No {selectedOp?.filePath ?? "files"} need updating.
+        </p>
+        <button
+          onClick={backToPickOperation}
+          className="rounded-lg border border-gray-700 px-4 py-2 text-sm font-medium transition-colors hover:border-gray-500"
+        >
+          Back
+        </button>
       </div>
     );
   }
@@ -311,7 +333,15 @@ export function DiffReview() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold">License year updates</h2>
+          {isConfigurable && (
+            <button
+              onClick={backToPickOperation}
+              className="mb-1 text-xs text-gray-500 transition-colors hover:text-gray-300"
+            >
+              ← Back
+            </button>
+          )}
+          <h2 className="text-xl font-semibold">{selectedOp?.name ?? "Updates"}</h2>
           <p className="text-sm text-gray-400">
             {diffs.length} files to update · {doneCount} done
           </p>

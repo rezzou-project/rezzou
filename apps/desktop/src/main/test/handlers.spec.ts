@@ -97,6 +97,26 @@ mock.module("@rezzou/operations", {
       prTitle: `chore: update license year to ${kCurrentYear}`,
       prDescription: "Automated update",
       apply: (content: string) => content
+    },
+    gitignoreMaintainerOperation: {
+      name: "Gitignore Maintainer",
+      description: "Ensure common entries are present in .gitignore without altering existing content",
+      filePath: ".gitignore",
+      branchName: "rezzou/gitignore-maintainer",
+      commitMessage: "chore: update .gitignore",
+      prTitle: "chore: update .gitignore",
+      prDescription: "Automated update",
+      apply: (content: string) => content
+    },
+    editorConfigOperation: {
+      name: "EditorConfig",
+      description: "Drop a standard .editorconfig if none exists",
+      filePath: ".editorconfig",
+      branchName: "rezzou/editorconfig",
+      commitMessage: "chore: add .editorconfig",
+      prTitle: "chore: add .editorconfig",
+      prDescription: "Automated update",
+      apply: (content: string) => content
     }
   }
 });
