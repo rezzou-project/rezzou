@@ -39,6 +39,15 @@ const mockListRepos = mock.fn(async() => [] as Repo[]);
 const mockGetFile = mock.fn(async() => null);
 const mockSubmitChanges = mock.fn(async() => kSubmitResult);
 const mockListMembers = mock.fn(async() => []);
+const kMockOperation = {
+  filePath: "LICENSE",
+  branchName: `rezzou/license-year-${kCurrentYear}`,
+  commitMessage: `chore: update license year to ${kCurrentYear}`,
+  prTitle: `chore: update license year to ${kCurrentYear}`,
+  prDescription: "Automated update",
+  reviewers: [],
+  apply: (content: string) => content
+};
 
 mock.module("@rezzou/providers", {
   namedExports: {
@@ -85,6 +94,12 @@ mock.module("@rezzou/operations", {
       prDescription: "Automated update",
       apply: (content: string) => content
     }
+  }
+});
+
+mock.module("../operation-registry.ts", {
+  namedExports: {
+    getOperation: mock.fn(() => kMockOperation)
   }
 });
 

@@ -3,7 +3,6 @@ import * as crypto from "node:crypto";
 
 // Import Third-party Dependencies
 import { GitLabAdapter, GitHubAdapter } from "@rezzou/providers";
-import { licenseYearOperation } from "@rezzou/operations";
 import {
   scanRepos,
   applyRepoDiff,
@@ -16,6 +15,9 @@ import {
   type OperationOverrides,
   type Member
 } from "@rezzou/core";
+
+// Import Internal Dependencies
+import { getOperation } from "./operation-registry.ts";
 
 // CONSTANTS
 const kGitHubDeviceCodeUrl = "https://github.com/login/device/code";
@@ -47,7 +49,7 @@ export async function handleLoadRepos(
 }
 
 export async function handleScanRepos(adapter: ProviderAdapter, repos: Repo[]): Promise<RepoDiff[]> {
-  return scanRepos(adapter, repos, licenseYearOperation);
+  return scanRepos(adapter, repos, getOperation("license-year"));
 }
 
 export async function handleApplyDiff(
@@ -55,7 +57,9 @@ export async function handleApplyDiff(
   diff: RepoDiff,
   overrides: OperationOverrides
 ): Promise<SubmitResult> {
-  return applyRepoDiff(adapter, diff, { ...licenseYearOperation, ...overrides });
+  const operation = getOperation("license-year");
+
+  return applyRepoDiff(adapter, diff, { ...operation, ...overrides });
 }
 
 export async function handleFetchMembers(
