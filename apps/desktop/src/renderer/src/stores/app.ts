@@ -59,6 +59,7 @@ interface AppActions {
   selectAll: () => void;
   deselectAll: () => void;
   proceedToPickOperation: () => void;
+  backToPickOperation: () => void;
   setSelectedOperation: (id: string) => void;
   scanRepos: () => Promise<void>;
   setOperationOverrides: (overrides: Partial<OperationOverrides>) => void;
@@ -171,6 +172,10 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
 
     proceedToPickOperation: () => {
       set({ step: "pick-operation" });
+    },
+
+    backToPickOperation: () => {
+      set({ step: "pick-operation", diffs: [] });
     },
 
     setSelectedOperation: (id: string) => {

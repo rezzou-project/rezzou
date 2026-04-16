@@ -217,6 +217,28 @@ describe("proceedToPickOperation", () => {
   });
 });
 
+describe("backToPickOperation", () => {
+  beforeEach(async() => {
+    await setupRepos([kRepo]);
+    mockApiScanRepos.mock.mockImplementationOnce(async() => [kDiff]);
+    getState().proceedToPickOperation();
+    getState().setSelectedOperation("license-year");
+    await getState().scanRepos();
+  });
+
+  it("should transition back to pick-operation step", () => {
+    getState().backToPickOperation();
+
+    assert.equal(getState().step, "pick-operation");
+  });
+
+  it("should clear diffs", () => {
+    getState().backToPickOperation();
+
+    assert.deepEqual(getState().diffs, []);
+  });
+});
+
 describe("setSelectedOperation", () => {
   it("should update selectedOperationId", () => {
     getState().setSelectedOperation("gitignore-maintainer");
