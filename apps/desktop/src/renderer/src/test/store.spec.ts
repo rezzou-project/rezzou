@@ -34,8 +34,8 @@ const kSubmitResult: SubmitResult = {
 const mockApiAutoLogin = mock.fn(async() => null);
 const mockApiAuthenticate = mock.fn(async() => [kNamespace] as Namespace[]);
 const mockApiLoadRepos = mock.fn(async() => [] as Repo[]);
-const mockApiScanRepos = mock.fn(async(_repos: Repo[]): Promise<RepoDiff[]> => []);
-const mockApiApplyDiff = mock.fn(async() => kSubmitResult);
+const mockApiScanRepos = mock.fn(async(_repos: Repo[], _operationId: string): Promise<RepoDiff[]> => []);
+const mockApiApplyDiff = mock.fn(async(_diff: RepoDiff, _overrides: unknown, _operationId: string) => kSubmitResult);
 
 (globalThis as Record<string, unknown>).window = {
   api: {
@@ -200,6 +200,24 @@ describe("selectAll / deselectAll", () => {
   });
 });
 
+describe("setSelectedOperation", () => {
+  it("should update selectedOperationId", () => {
+    getState().setSelectedOperation("gitignore-maintainer");
+
+    assert.equal(getState().selectedOperationId, "gitignore-maintainer");
+  });
+
+  it("should default to license-year", () => {
+    assert.equal(getState().selectedOperationId, "license-year");
+  });
+
+  it("should not change the current step", () => {
+    getState().setSelectedOperation("gitignore-maintainer");
+
+    assert.equal(getState().step, "connect");
+  });
+});
+
 describe("scanRepos", () => {
   beforeEach(async() => {
     await setupRepos([kRepo]);
@@ -229,6 +247,16 @@ describe("scanRepos", () => {
 
     const [passedRepos] = mockApiScanRepos.mock.calls[0].arguments;
     assert.deepEqual(passedRepos, [repoA]);
+  });
+
+  it("should pass selectedOperationId to window.api.scanRepos", async() => {
+    mockApiScanRepos.mock.mockImplementation(async() => []);
+    getState().setSelectedOperation("my-op");
+
+    await getState().scanRepos();
+
+    const [, passedOperationId] = mockApiScanRepos.mock.calls[0].arguments;
+    assert.equal(passedOperationId, "my-op");
   });
 });
 
@@ -265,6 +293,16 @@ describe("applyDiff", () => {
     await getState().applyDiff("unknown/repo");
 
     assert.equal(mockApiApplyDiff.mock.callCount(), 0);
+  });
+
+  it("should pass selectedOperationId to window.api.applyDiff", async() => {
+    mockApiApplyDiff.mock.mockImplementation(async() => kSubmitResult);
+    getState().setSelectedOperation("my-op");
+
+    await getState().applyDiff(kRepo.fullPath);
+
+    const [, , passedOperationId] = mockApiApplyDiff.mock.calls[0].arguments;
+    assert.equal(passedOperationId, "my-op");
   });
 });
 
