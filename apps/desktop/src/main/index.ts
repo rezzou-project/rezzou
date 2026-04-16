@@ -7,7 +7,17 @@ import { app, BrowserWindow, shell, ipcMain, safeStorage } from "electron";
 import type { Repo, RepoDiff, ProviderAdapter, Provider, OperationOverrides, Namespace } from "@rezzou/core";
 
 // Import Internal Dependencies
-import { handleAuthenticate, handleLoadRepos, handleScanRepos, handleApplyDiff, handleFetchMembers } from "./handlers.ts";
+import {
+  handleAuthenticate,
+  handleLoadRepos,
+  handleScanRepos,
+  handleApplyDiff,
+  handleFetchMembers,
+  handleGitHubDeviceStart,
+  handleGitHubDevicePoll,
+  handleGitLabOAuthStart,
+  handleGitLabOAuthCallback
+} from "./handlers.ts";
 
 interface AuthenticateOptions {
   token: string;
@@ -16,20 +26,49 @@ interface AuthenticateOptions {
 
 // CONSTANTS
 const kCredentialsFile = "credentials.json";
+const kGitHubClientId = import.meta.env.MAIN_VITE_GITHUB_CLIENT_ID as string;
+const kGitLabClientId = import.meta.env.MAIN_VITE_GITLAB_CLIENT_ID as string;
 
 let currentAdapter: ProviderAdapter | null = null;
+let mainWindow: BrowserWindow | null = null;
+let pendingGitLabVerifier: string | null = null;
+let githubDeviceAbortController: AbortController | null = null;
 
 function getCredentialsPath(): string {
   return path.join(app.getPath("userData"), kCredentialsFile);
 }
 
-function saveToken(token: string): void {
+function saveCredentials(token: string, provider: Provider): void {
   const encrypted = safeStorage.encryptString(token);
-  fs.writeFileSync(getCredentialsPath(), JSON.stringify({ token: encrypted.toString("base64") }));
+  fs.writeFileSync(getCredentialsPath(), JSON.stringify({ token: encrypted.toString("base64"), provider }));
+}
+
+function loadSavedCredentials(): { token: string; provider: Provider; } | null {
+  const credPath = getCredentialsPath();
+  if (!fs.existsSync(credPath)) {
+    return null;
+  }
+
+  try {
+    const raw = JSON.parse(fs.readFileSync(credPath, "utf-8")) as Record<string, string>;
+    if (!raw.token || !raw.provider) {
+      return null;
+    }
+
+    const token = safeStorage.decryptString(Buffer.from(raw.token, "base64"));
+
+    return {
+      token,
+      provider: raw.provider as Provider
+    };
+  }
+  catch {
+    return null;
+  }
 }
 
 function createWindow(): void {
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1100,
     height: 800,
     webPreferences: {
@@ -49,20 +88,123 @@ function createWindow(): void {
 
     return { action: "deny" };
   });
+
+  mainWindow.on("closed", () => {
+    mainWindow = null;
+  });
 }
 
 function toError(err: unknown): never {
   throw new Error(err instanceof Error ? err.message : String(err));
 }
 
+// macOS: URL scheme callback fires on the already-running instance via open-url
+app.on("open-url", async(event, url) => {
+  event.preventDefault();
+
+  const parsed = new URL(url);
+  if (parsed.hostname !== "gitlab" || parsed.pathname !== "/callback") {
+    return;
+  }
+
+  const code = parsed.searchParams.get("code");
+  const verifier = pendingGitLabVerifier;
+  pendingGitLabVerifier = null;
+
+  if (!code || !verifier) {
+    return;
+  }
+
+  try {
+    const token = await handleGitLabOAuthCallback(kGitLabClientId, code, verifier);
+    const { adapter, namespaces } = await handleAuthenticate(token, "gitlab");
+    currentAdapter = adapter;
+    saveCredentials(token, "gitlab");
+    mainWindow?.webContents.send("oauth:authenticated", namespaces, "gitlab");
+  }
+  catch {
+    mainWindow?.webContents.send("oauth:error", "GitLab authentication failed");
+  }
+});
+
 app.whenReady().then(() => {
+  // Register rezzou:// as a custom URL scheme for OAuth callbacks.
+  // In production, also configure "protocols" in electron-builder config.
+  app.setAsDefaultProtocolClient("rezzou");
+
+  ipcMain.handle("oauth:github-device-start", async(event): Promise<{ user_code: string; verification_uri: string; }> => {
+    if (!kGitHubClientId) {
+      throw new Error("MAIN_VITE_GITHUB_CLIENT_ID is not set");
+    }
+
+    githubDeviceAbortController?.abort();
+    githubDeviceAbortController = new AbortController();
+    const { signal } = githubDeviceAbortController;
+
+    const { device_code, user_code, verification_uri, interval } = await handleGitHubDeviceStart(kGitHubClientId);
+    shell.openExternal(verification_uri);
+
+    handleGitHubDevicePoll({ clientId: kGitHubClientId, deviceCode: device_code, interval, signal })
+      .then(async(token) => {
+        const { adapter, namespaces } = await handleAuthenticate(token, "github");
+        currentAdapter = adapter;
+        saveCredentials(token, "github");
+        githubDeviceAbortController = null;
+        event.sender.send("oauth:authenticated", namespaces, "github");
+      })
+      .catch((pollError: unknown) => {
+        githubDeviceAbortController = null;
+        const isCancelled = pollError instanceof Error &&
+          (pollError.message === "OAuth cancelled" || pollError.name === "AbortError");
+        if (!isCancelled) {
+          const message = pollError instanceof Error ? pollError.message : "Unknown error";
+          event.sender.send("oauth:error", message);
+        }
+      });
+
+    return { user_code, verification_uri };
+  });
+
+  ipcMain.handle("oauth:gitlab-start", async() => {
+    if (!kGitLabClientId) {
+      throw new Error("MAIN_VITE_GITLAB_CLIENT_ID is not set");
+    }
+
+    const { url, verifier } = handleGitLabOAuthStart(kGitLabClientId);
+    pendingGitLabVerifier = verifier;
+    shell.openExternal(url);
+  });
+
+  ipcMain.handle("oauth:cancel", () => {
+    githubDeviceAbortController?.abort();
+    githubDeviceAbortController = null;
+    pendingGitLabVerifier = null;
+  });
+
+  ipcMain.handle("auth:auto-login", async(): Promise<{ namespaces: Namespace[]; provider: Provider; } | null> => {
+    const saved = loadSavedCredentials();
+    if (!saved) {
+      return null;
+    }
+
+    try {
+      const { adapter, namespaces } = await handleAuthenticate(saved.token, saved.provider);
+      currentAdapter = adapter;
+
+      return { namespaces, provider: saved.provider };
+    }
+    catch {
+      return null;
+    }
+  });
+
   ipcMain.handle("auth:authenticate", async(_event, options: AuthenticateOptions): Promise<Namespace[]> => {
     const { token, provider } = options;
 
     const { adapter, namespaces } = await handleAuthenticate(token, provider).catch(toError);
 
     currentAdapter = adapter;
-    saveToken(token);
+    saveCredentials(token, provider);
 
     return namespaces;
   });
