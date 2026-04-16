@@ -1,0 +1,36 @@
+{
+  "name": "@rezzou/sdk",
+  "version": "0.1.0",
+  "description": "SDK for building custom Rezzou operations",
+  "author": "Pierre Demailly <pierredemailly.pro@gmail.com>",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "test": "node --strip-types --test src/test/**/*.spec.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "files": ["dist"],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "registry": "https://registry.npmjs.org/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rezzou-project/rezzou.git",
+    "directory": "packages/sdk"
+  },
+  "dependencies": {
+    "@rezzou/core": "*"
+  },
+  "peerDependencies": {}
+}
