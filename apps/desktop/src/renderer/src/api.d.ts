@@ -3,11 +3,17 @@ import type { Repo, RepoDiff, SubmitResult, Provider, Namespace, OperationOverri
 declare global {
   interface Window {
     api: {
+      autoLogin(): Promise<{ namespaces: Namespace[]; provider: Provider; } | null>;
       authenticate(token: string, provider: Provider): Promise<Namespace[]>;
       loadRepos(namespace: string): Promise<Repo[]>;
       scanRepos(repos: Repo[]): Promise<RepoDiff[]>;
       applyDiff(diff: RepoDiff, overrides: OperationOverrides): Promise<SubmitResult>;
       fetchMembers(namespace: string): Promise<Member[]>;
+      startGitHubOAuth(): Promise<{ user_code: string; verification_uri: string; }>;
+      startGitLabOAuth(): Promise<void>;
+      cancelOAuth(): Promise<void>;
+      onOAuthAuthenticated(callback: (namespaces: Namespace[], provider: Provider) => void): () => void;
+      onOAuthError(callback: (message: string) => void): () => void;
     };
   }
 }

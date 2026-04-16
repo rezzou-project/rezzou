@@ -31,6 +31,7 @@ const kSubmitResult: SubmitResult = {
   prTitle: "chore: update license year"
 };
 
+const mockApiAutoLogin = mock.fn(async() => null);
 const mockApiAuthenticate = mock.fn(async() => [kNamespace] as Namespace[]);
 const mockApiLoadRepos = mock.fn(async() => [] as Repo[]);
 const mockApiScanRepos = mock.fn(async(_repos: Repo[]): Promise<RepoDiff[]> => []);
@@ -38,6 +39,7 @@ const mockApiApplyDiff = mock.fn(async() => kSubmitResult);
 
 (globalThis as Record<string, unknown>).window = {
   api: {
+    autoLogin: mockApiAutoLogin,
     authenticate: mockApiAuthenticate,
     loadRepos: mockApiLoadRepos,
     scanRepos: mockApiScanRepos,
@@ -60,6 +62,7 @@ async function setupRepos(repos: Repo[] = [kRepo]): Promise<void> {
 
 beforeEach(() => {
   getState().reset();
+  mockApiAutoLogin.mock.resetCalls();
   mockApiAuthenticate.mock.resetCalls();
   mockApiLoadRepos.mock.resetCalls();
   mockApiScanRepos.mock.resetCalls();

@@ -1,3 +1,6 @@
+// Import Node.js Dependencies
+import * as crypto from "node:crypto";
+
 // Import Third-party Dependencies
 import { GitLabAdapter, GitHubAdapter } from "@rezzou/providers";
 import { licenseYearOperation } from "@rezzou/operations";
@@ -13,6 +16,16 @@ import {
   type OperationOverrides,
   type Member
 } from "@rezzou/core";
+
+// CONSTANTS
+const kGitHubDeviceCodeUrl = "https://github.com/login/device/code";
+const kGitHubAccessTokenUrl = "https://github.com/login/oauth/access_token";
+const kGitLabAuthorizeUrl = "https://gitlab.com/oauth/authorize";
+const kGitLabTokenUrl = "https://gitlab.com/oauth/token";
+const kGitLabRedirectUri = "rezzou://gitlab/callback";
+const kGitHubScopes = "repo read:org";
+const kGitLabScopes = "api read_user";
+const kSlowDownIncrement = 5;
 
 export async function handleAuthenticate(
   token: string,
@@ -50,4 +63,121 @@ export async function handleFetchMembers(
   namespace: string
 ): Promise<Member[]> {
   return adapter.listMembers(namespace);
+}
+
+export interface GitHubDeviceFlowStart {
+  device_code: string;
+  user_code: string;
+  verification_uri: string;
+  interval: number;
+  expires_in: number;
+}
+
+export async function handleGitHubDeviceStart(clientId: string): Promise<GitHubDeviceFlowStart> {
+  const response = await fetch(kGitHubDeviceCodeUrl, {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify({ client_id: clientId, scope: kGitHubScopes })
+  });
+
+  if (!response.ok) {
+    throw new Error(`GitHub device code request failed with status ${response.status}`);
+  }
+
+  return response.json() as Promise<GitHubDeviceFlowStart>;
+}
+
+export interface GitHubDevicePollOptions {
+  clientId: string;
+  deviceCode: string;
+  interval: number;
+  signal: AbortSignal;
+}
+
+export async function handleGitHubDevicePoll(options: GitHubDevicePollOptions): Promise<string> {
+  const { clientId, deviceCode, signal } = options;
+  let pollInterval = options.interval;
+
+  while (true) {
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(resolve, pollInterval * 1_000);
+      signal.addEventListener("abort", () => {
+        clearTimeout(timeout);
+        reject(new Error("OAuth cancelled"));
+      }, { once: true });
+    });
+
+    const response = await fetch(kGitHubAccessTokenUrl, {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client_id: clientId,
+        device_code: deviceCode,
+        grant_type: "urn:ietf:params:oauth:grant-type:device_code"
+      }),
+      signal
+    });
+
+    const data = await response.json() as Record<string, string>;
+
+    if (data.access_token) {
+      return data.access_token;
+    }
+
+    if (data.error === "slow_down") {
+      pollInterval += kSlowDownIncrement;
+    }
+    else if (data.error !== "authorization_pending") {
+      throw new Error(data.error_description ?? data.error ?? "Unknown OAuth error");
+    }
+  }
+}
+
+export interface GitLabOAuthStartResult {
+  url: string;
+  verifier: string;
+}
+
+export function handleGitLabOAuthStart(clientId: string): GitLabOAuthStartResult {
+  const verifier = crypto.randomBytes(32).toString("base64url");
+  const challenge = crypto.createHash("sha256").update(verifier).digest("base64url");
+
+  const authUrl = new URL(kGitLabAuthorizeUrl);
+  authUrl.searchParams.set("client_id", clientId);
+  authUrl.searchParams.set("redirect_uri", kGitLabRedirectUri);
+  authUrl.searchParams.set("response_type", "code");
+  authUrl.searchParams.set("scope", kGitLabScopes);
+  authUrl.searchParams.set("code_challenge", challenge);
+  authUrl.searchParams.set("code_challenge_method", "S256");
+
+  return { url: authUrl.toString(), verifier };
+}
+
+export async function handleGitLabOAuthCallback(
+  clientId: string,
+  code: string,
+  verifier: string
+): Promise<string> {
+  const response = await fetch(kGitLabTokenUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({
+      client_id: clientId,
+      code,
+      grant_type: "authorization_code",
+      redirect_uri: kGitLabRedirectUri,
+      code_verifier: verifier
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`GitLab token exchange failed with status ${response.status}`);
+  }
+
+  const data = await response.json() as Record<string, string>;
+  if (!data.access_token) {
+    throw new Error(data.error_description ?? "Failed to obtain access token");
+  }
+
+  return data.access_token;
 }

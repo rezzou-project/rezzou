@@ -1,3 +1,6 @@
+// Import Third-party Dependencies
+import { useEffect } from "react";
+
 // Import Internal Dependencies
 import { useAppStore } from "./stores/app.js";
 import { SetupForm } from "./components/SetupForm.js";
@@ -8,6 +11,11 @@ import { ResultPanel } from "./components/ResultPanel.js";
 export function App() {
   const step = useAppStore((state) => state.step);
   const reset = useAppStore((state) => state.reset);
+  const autoLogin = useAppStore((state) => state.autoLogin);
+
+  useEffect(() => {
+    void autoLogin();
+  }, [autoLogin]);
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">

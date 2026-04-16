@@ -29,9 +29,15 @@ export interface RepoDiff extends BaseRepoDiff {
   error?: string;
 }
 
+interface AutoLoginUser {
+  displayName: string;
+  provider: Provider;
+}
+
 interface AppState {
   step: Step;
   provider: Provider;
+  autoLoginUser: AutoLoginUser | null;
   namespaces: Namespace[];
   selectedNamespace: Namespace | null;
   repos: Repo[];
@@ -43,7 +49,10 @@ interface AppState {
 }
 
 interface AppActions {
+  autoLogin: () => Promise<void>;
+  continueWithSavedAccount: () => void;
   authenticate: (token: string, provider: Provider) => Promise<void>;
+  receiveOAuthResult: (namespaces: Namespace[], provider: Provider) => void;
   loadRepos: (namespace: Namespace) => Promise<void>;
   toggleRepo: (id: string) => void;
   selectAll: () => void;
@@ -58,6 +67,7 @@ interface AppActions {
 const kInitialState: AppState = {
   step: "connect",
   provider: "gitlab",
+  autoLoginUser: null,
   namespaces: [],
   selectedNamespace: null,
   repos: [],
@@ -78,6 +88,21 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
   return {
     ...kInitialState,
 
+    autoLogin: async() => {
+      const result = await window.api.autoLogin();
+      if (result !== null) {
+        const userNs = result.namespaces.find((ns) => ns.type === "user");
+        const autoLoginUser: AutoLoginUser | null = userNs
+          ? { displayName: userNs.displayName, provider: result.provider }
+          : null;
+        set({ provider: result.provider, namespaces: result.namespaces, autoLoginUser });
+      }
+    },
+
+    continueWithSavedAccount: () => {
+      set({ autoLoginUser: null });
+    },
+
     authenticate: async(token: string, provider: Provider) => {
       set({ isLoading: true, error: null });
 
@@ -92,6 +117,10 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
           error: ipcErrorMessage(authenticateError, "Failed to connect")
         });
       }
+    },
+
+    receiveOAuthResult: (namespaces: Namespace[], provider: Provider) => {
+      set({ provider, namespaces, isLoading: false, error: null });
     },
 
     loadRepos: async(namespace: Namespace) => {
@@ -211,6 +240,9 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
       set({ step: "results" });
     },
 
-    reset: () => set(kInitialState)
+    reset: () => {
+      set(kInitialState);
+      void get().autoLogin();
+    }
   };
 });

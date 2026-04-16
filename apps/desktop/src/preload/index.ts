@@ -22,5 +22,36 @@ contextBridge.exposeInMainWorld("api", {
     overrides: OperationOverrides
   ): Promise<SubmitResult> => ipcRenderer.invoke("engine:applyDiff", { diff, overrides }),
 
-  fetchMembers: (namespace: string): Promise<Member[]> => ipcRenderer.invoke("engine:fetchMembers", namespace)
+  fetchMembers: (namespace: string): Promise<Member[]> => ipcRenderer.invoke("engine:fetchMembers", namespace),
+
+  autoLogin: (): Promise<{ namespaces: Namespace[]; provider: Provider; } | null> => ipcRenderer.invoke("auth:auto-login"),
+
+  startGitHubOAuth: (): Promise<{
+    user_code: string;
+    verification_uri: string;
+  }> => ipcRenderer.invoke("oauth:github-device-start"),
+
+  startGitLabOAuth: (): Promise<void> => ipcRenderer.invoke("oauth:gitlab-start"),
+
+  cancelOAuth: (): Promise<void> => ipcRenderer.invoke("oauth:cancel"),
+
+  onOAuthAuthenticated: (
+    callback: (namespaces: Namespace[], provider: Provider) => void
+  ): (() => void) => {
+    function listener(_event: unknown, namespaces: Namespace[], provider: Provider) {
+      callback(namespaces, provider);
+    }
+    ipcRenderer.on("oauth:authenticated", listener);
+
+    return () => ipcRenderer.removeListener("oauth:authenticated", listener);
+  },
+
+  onOAuthError: (callback: (message: string) => void): (() => void) => {
+    function listener(_event: unknown, message: string) {
+      callback(message);
+    }
+    ipcRenderer.on("oauth:error", listener);
+
+    return () => ipcRenderer.removeListener("oauth:error", listener);
+  }
 });

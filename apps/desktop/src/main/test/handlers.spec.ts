@@ -1,5 +1,6 @@
 // Import Node.js Dependencies
-import { describe, it, mock, beforeEach } from "node:test";
+import * as crypto from "node:crypto";
+import { describe, it, mock, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 
 // Import Third-party Dependencies
@@ -87,7 +88,16 @@ mock.module("@rezzou/operations", {
   }
 });
 
-const { handleAuthenticate, handleLoadRepos, handleScanRepos, handleApplyDiff } = await import("../handlers.ts");
+const {
+  handleAuthenticate,
+  handleLoadRepos,
+  handleScanRepos,
+  handleApplyDiff,
+  handleGitHubDeviceStart,
+  handleGitHubDevicePoll,
+  handleGitLabOAuthStart,
+  handleGitLabOAuthCallback
+} = await import("../handlers.ts");
 
 const kMockAdapter: ProviderAdapter = {
   listNamespaces: mockListNamespaces,
@@ -211,5 +221,192 @@ describe("handleApplyDiff", () => {
 
     const [, diff] = mockApplyRepoDiff.mock.calls[0].arguments;
     assert.deepEqual(diff, kDiff);
+  });
+});
+
+describe("handleGitLabOAuthStart", () => {
+  it("should return a URL with the correct OAuth parameters", () => {
+    const { url } = handleGitLabOAuthStart("test-client-id");
+    const parsed = new URL(url);
+
+    assert.equal(parsed.origin + parsed.pathname, "https://gitlab.com/oauth/authorize");
+    assert.equal(parsed.searchParams.get("client_id"), "test-client-id");
+    assert.equal(parsed.searchParams.get("redirect_uri"), "rezzou://gitlab/callback");
+    assert.equal(parsed.searchParams.get("response_type"), "code");
+    assert.equal(parsed.searchParams.get("scope"), "api read_user");
+    assert.equal(parsed.searchParams.get("code_challenge_method"), "S256");
+    assert.ok(parsed.searchParams.get("code_challenge") !== null);
+  });
+
+  it("should derive code_challenge from verifier using SHA256 base64url", () => {
+    const { url, verifier } = handleGitLabOAuthStart("test-client-id");
+    const expectedChallenge = crypto.createHash("sha256").update(verifier).digest("base64url");
+
+    assert.equal(new URL(url).searchParams.get("code_challenge"), expectedChallenge);
+  });
+
+  it("should generate a unique verifier on each call", () => {
+    const first = handleGitLabOAuthStart("test-client-id");
+    const second = handleGitLabOAuthStart("test-client-id");
+
+    assert.notEqual(first.verifier, second.verifier);
+  });
+});
+
+describe("handleGitHubDeviceStart", () => {
+  afterEach(() => mock.restoreAll());
+
+  it("should POST to the device code endpoint and return parsed fields", async() => {
+    const kDeviceResponse = {
+      device_code: "dev-code-123",
+      user_code: "ABCD-1234",
+      verification_uri: "https://github.com/login/device",
+      interval: 5,
+      expires_in: 900
+    };
+
+    mock.method(globalThis, "fetch", async function mockFetch() {
+      return {
+        ok: true,
+        json: async function json() {
+          return kDeviceResponse;
+        }
+      };
+    });
+
+    const result = await handleGitHubDeviceStart("client-id");
+
+    assert.equal(result.user_code, "ABCD-1234");
+    assert.equal(result.verification_uri, "https://github.com/login/device");
+    assert.equal(result.device_code, "dev-code-123");
+    assert.equal(result.interval, 5);
+  });
+
+  it("should throw when the response is not ok", async() => {
+    mock.method(globalThis, "fetch", async function mockFetch() {
+      return { ok: false, status: 422 };
+    });
+
+    await assert.rejects(
+      handleGitHubDeviceStart("client-id"),
+      /422/
+    );
+  });
+});
+
+describe("handleGitHubDevicePoll", () => {
+  afterEach(() => mock.restoreAll());
+
+  it("should return the access token when authorization succeeds", async() => {
+    mock.method(globalThis, "fetch", async function mockFetch() {
+      return {
+        ok: true,
+        json: async function json() {
+          return { access_token: "gha_token123" };
+        }
+      };
+    });
+
+    const controller = new AbortController();
+    const token = await handleGitHubDevicePoll({
+      clientId: "client-id",
+      deviceCode: "dev-code",
+      interval: 0,
+      signal: controller.signal
+    });
+
+    assert.equal(token, "gha_token123");
+  });
+
+  it("should keep polling while authorization is pending", async() => {
+    let callCount = 0;
+
+    mock.method(globalThis, "fetch", async function mockFetch() {
+      callCount++;
+      const body = callCount < 3
+        ? { error: "authorization_pending" }
+        : { access_token: "gha_ready" };
+
+      return {
+        ok: true,
+        json: async function json() {
+          return body;
+        }
+      };
+    });
+
+    const controller = new AbortController();
+    const token = await handleGitHubDevicePoll({
+      clientId: "client-id",
+      deviceCode: "dev-code",
+      interval: 0,
+      signal: controller.signal
+    });
+
+    assert.equal(token, "gha_ready");
+    assert.equal(callCount, 3);
+  });
+
+  it("should throw on a terminal error like expired_token", async() => {
+    mock.method(globalThis, "fetch", async function mockFetch() {
+      return {
+        ok: true,
+        json: async function json() {
+          return { error: "expired_token", error_description: "Device code expired" };
+        }
+      };
+    });
+
+    const controller = new AbortController();
+    await assert.rejects(
+      handleGitHubDevicePoll({ clientId: "client-id", deviceCode: "dev-code", interval: 0, signal: controller.signal }),
+      /Device code expired/
+    );
+  });
+});
+
+describe("handleGitLabOAuthCallback", () => {
+  afterEach(() => mock.restoreAll());
+
+  it("should exchange the code for an access token", async() => {
+    mock.method(globalThis, "fetch", async function mockFetch() {
+      return {
+        ok: true,
+        json: async function json() {
+          return { access_token: "glpat-token" };
+        }
+      };
+    });
+
+    const token = await handleGitLabOAuthCallback("client-id", "auth-code", "verifier-123");
+
+    assert.equal(token, "glpat-token");
+  });
+
+  it("should throw when the response is not ok", async() => {
+    mock.method(globalThis, "fetch", async function mockFetch() {
+      return { ok: false, status: 401 };
+    });
+
+    await assert.rejects(
+      handleGitLabOAuthCallback("client-id", "bad-code", "verifier"),
+      /401/
+    );
+  });
+
+  it("should throw when the response contains no access_token", async() => {
+    mock.method(globalThis, "fetch", async function mockFetch() {
+      return {
+        ok: true,
+        json: async function json() {
+          return { error: "invalid_grant", error_description: "Code expired" };
+        }
+      };
+    });
+
+    await assert.rejects(
+      handleGitLabOAuthCallback("client-id", "code", "verifier"),
+      /Code expired/
+    );
   });
 });
