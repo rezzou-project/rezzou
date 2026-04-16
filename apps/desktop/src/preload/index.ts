@@ -15,12 +15,16 @@ contextBridge.exposeInMainWorld("api", {
 
   loadRepos: (namespace: string): Promise<Repo[]> => ipcRenderer.invoke("auth:loadRepos", namespace),
 
-  scanRepos: (repos: Repo[]): Promise<RepoDiff[]> => ipcRenderer.invoke("engine:scanRepos", repos),
+  scanRepos: (
+    repos: Repo[],
+    operationId: string
+  ): Promise<RepoDiff[]> => ipcRenderer.invoke("engine:scanRepos", { repos, operationId }),
 
   applyDiff: (
     diff: RepoDiff,
-    overrides: OperationOverrides
-  ): Promise<SubmitResult> => ipcRenderer.invoke("engine:applyDiff", { diff, overrides }),
+    overrides: OperationOverrides,
+    operationId: string
+  ): Promise<SubmitResult> => ipcRenderer.invoke("engine:applyDiff", { diff, overrides, operationId }),
 
   fetchMembers: (namespace: string): Promise<Member[]> => ipcRenderer.invoke("engine:fetchMembers", namespace),
 

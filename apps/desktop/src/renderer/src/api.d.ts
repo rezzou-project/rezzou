@@ -6,8 +6,8 @@ declare global {
       autoLogin(): Promise<{ namespaces: Namespace[]; provider: Provider; } | null>;
       authenticate(token: string, provider: Provider): Promise<Namespace[]>;
       loadRepos(namespace: string): Promise<Repo[]>;
-      scanRepos(repos: Repo[]): Promise<RepoDiff[]>;
-      applyDiff(diff: RepoDiff, overrides: OperationOverrides): Promise<SubmitResult>;
+      scanRepos(repos: Repo[], operationId: string): Promise<RepoDiff[]>;
+      applyDiff(diff: RepoDiff, overrides: OperationOverrides, operationId: string): Promise<SubmitResult>;
       fetchMembers(namespace: string): Promise<Member[]>;
       startGitHubOAuth(): Promise<{ user_code: string; verification_uri: string; }>;
       startGitLabOAuth(): Promise<void>;
