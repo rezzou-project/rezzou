@@ -8,6 +8,7 @@ declare global {
       loadRepos(namespace: string): Promise<Repo[]>;
       scanRepos(repos: Repo[], operationId: string): Promise<RepoDiff[]>;
       applyDiff(diff: RepoDiff, overrides: OperationOverrides, operationId: string): Promise<SubmitResult>;
+      listOperations(): Promise<{ id: string; name: string; description: string; }[]>;
       fetchMembers(namespace: string): Promise<Member[]>;
       startGitHubOAuth(): Promise<{ user_code: string; verification_uri: string; }>;
       startGitLabOAuth(): Promise<void>;

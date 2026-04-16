@@ -24,6 +24,8 @@ function applyLicenseYear(content: string): string | null {
 }
 
 export const licenseYearOperation = {
+  name: "License Year",
+  description: "Update the copyright year in the LICENSE file",
   filePath: "LICENSE",
   branchName: `rezzou/license-year-${kCurrentYear}`,
   commitMessage: `chore: update license year to ${kCurrentYear}`,

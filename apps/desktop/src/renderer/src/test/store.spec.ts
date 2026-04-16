@@ -36,6 +36,9 @@ const mockApiAuthenticate = mock.fn(async() => [kNamespace] as Namespace[]);
 const mockApiLoadRepos = mock.fn(async() => [] as Repo[]);
 const mockApiScanRepos = mock.fn(async(_repos: Repo[], _operationId: string): Promise<RepoDiff[]> => []);
 const mockApiApplyDiff = mock.fn(async(_diff: RepoDiff, _overrides: unknown, _operationId: string) => kSubmitResult);
+const mockApiListOperations = mock.fn(
+  async() => [{ id: "license-year", name: "License Year", description: "Update copyright year" }]
+);
 
 (globalThis as Record<string, unknown>).window = {
   api: {
@@ -43,7 +46,8 @@ const mockApiApplyDiff = mock.fn(async(_diff: RepoDiff, _overrides: unknown, _op
     authenticate: mockApiAuthenticate,
     loadRepos: mockApiLoadRepos,
     scanRepos: mockApiScanRepos,
-    applyDiff: mockApiApplyDiff
+    applyDiff: mockApiApplyDiff,
+    listOperations: mockApiListOperations
   }
 };
 
@@ -66,6 +70,7 @@ beforeEach(() => {
   mockApiAuthenticate.mock.resetCalls();
   mockApiLoadRepos.mock.resetCalls();
   mockApiScanRepos.mock.resetCalls();
+  mockApiListOperations.mock.resetCalls();
   mockApiApplyDiff.mock.resetCalls();
 });
 
@@ -197,6 +202,18 @@ describe("selectAll / deselectAll", () => {
     getState().selectAll();
 
     assert.deepEqual(getState().selectedRepoIds, ["1", "2"]);
+  });
+});
+
+describe("proceedToPickOperation", () => {
+  beforeEach(async() => {
+    await setupRepos([kRepo]);
+  });
+
+  it("should transition to pick-operation step", () => {
+    getState().proceedToPickOperation();
+
+    assert.equal(getState().step, "pick-operation");
   });
 });
 
