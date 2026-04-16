@@ -5,7 +5,7 @@ import type { Provider, Namespace, Repo, RepoDiff as BaseRepoDiff, SubmitResult,
 // Import Internal Dependencies
 import { licenseYearOperation } from "@rezzou/operations";
 
-type Step = "connect" | "repos" | "diffs" | "results";
+type Step = "connect" | "repos" | "pick-operation" | "diffs" | "results";
 
 function ipcErrorMessage(error: unknown, fallback: string): string {
   if (!(error instanceof Error)) {
@@ -42,6 +42,7 @@ interface AppState {
   selectedNamespace: Namespace | null;
   repos: Repo[];
   selectedRepoIds: string[];
+  selectedOperationId: string;
   diffs: RepoDiff[];
   operationOverrides: OperationOverrides;
   isLoading: boolean;
@@ -57,6 +58,7 @@ interface AppActions {
   toggleRepo: (id: string) => void;
   selectAll: () => void;
   deselectAll: () => void;
+  setSelectedOperation: (id: string) => void;
   scanRepos: () => Promise<void>;
   setOperationOverrides: (overrides: Partial<OperationOverrides>) => void;
   applyDiff: (repoPath: string) => Promise<void>;
@@ -72,6 +74,7 @@ const kInitialState: AppState = {
   selectedNamespace: null,
   repos: [],
   selectedRepoIds: [],
+  selectedOperationId: "license-year",
   diffs: [],
   operationOverrides: {
     branchName: licenseYearOperation.branchName,
@@ -165,6 +168,10 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
       set({ selectedRepoIds: [] });
     },
 
+    setSelectedOperation: (id: string) => {
+      set({ selectedOperationId: id });
+    },
+
     setOperationOverrides: (overrides: Partial<OperationOverrides>) => {
       set((state) => {
         return { operationOverrides: { ...state.operationOverrides, ...overrides } };
@@ -172,12 +179,12 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
     },
 
     scanRepos: async() => {
-      const { repos, selectedRepoIds } = get();
+      const { repos, selectedRepoIds, selectedOperationId } = get();
 
       set({ isLoading: true, error: null });
 
       const selectedRepos = repos.filter((repo) => selectedRepoIds.includes(repo.id));
-      const baseDiffs = await window.api.scanRepos(selectedRepos);
+      const baseDiffs = await window.api.scanRepos(selectedRepos, selectedOperationId);
       const diffs: RepoDiff[] = baseDiffs.map((diff) => {
         return {
           ...diff,
@@ -189,7 +196,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
     },
 
     applyDiff: async(repoPath: string) => {
-      const { diffs, operationOverrides } = get();
+      const { diffs, operationOverrides, selectedOperationId } = get();
 
       const diffIndex = diffs.findIndex((diff) => diff.repo.fullPath === repoPath);
       if (diffIndex === -1) {
@@ -206,7 +213,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
       });
 
       try {
-        const result: SubmitResult = await window.api.applyDiff(diff, operationOverrides);
+        const result: SubmitResult = await window.api.applyDiff(diff, operationOverrides, selectedOperationId);
 
         set((state) => {
           const updatedDiffs = [...state.diffs];
