@@ -59,6 +59,8 @@ export interface ProviderAdapter {
 }
 
 export interface Operation {
+  readonly name: string;
+  readonly description: string;
   readonly filePath: string;
   readonly branchName: string;
   readonly commitMessage: string;

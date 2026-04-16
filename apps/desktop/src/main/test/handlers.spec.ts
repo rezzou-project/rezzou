@@ -40,6 +40,8 @@ const mockGetFile = mock.fn(async() => null);
 const mockSubmitChanges = mock.fn(async() => kSubmitResult);
 const mockListMembers = mock.fn(async() => []);
 const kMockOperation = {
+  name: "License Year",
+  description: "Update the copyright year in the LICENSE file",
   filePath: "LICENSE",
   branchName: `rezzou/license-year-${kCurrentYear}`,
   commitMessage: `chore: update license year to ${kCurrentYear}`,
@@ -87,6 +89,8 @@ mock.module("@rezzou/core", {
 mock.module("@rezzou/operations", {
   namedExports: {
     licenseYearOperation: {
+      name: "License Year",
+      description: "Update the copyright year in the LICENSE file",
       filePath: "LICENSE",
       branchName: `rezzou/license-year-${kCurrentYear}`,
       commitMessage: `chore: update license year to ${kCurrentYear}`,

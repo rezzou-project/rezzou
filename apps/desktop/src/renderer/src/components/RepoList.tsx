@@ -23,7 +23,7 @@ function RepoItem({ repo }: { repo: Repo; }) {
 }
 
 export function RepoList() {
-  const { repos, selectedRepoIds, selectedNamespace, selectAll, deselectAll, scanRepos, isLoading } =
+  const { repos, selectedRepoIds, selectedNamespace, selectAll, deselectAll, proceedToPickOperation, isLoading } =
     useAppStore();
   const allSelected = selectedRepoIds.length === repos.length;
 
@@ -46,11 +46,11 @@ export function RepoList() {
           </button>
 
           <button
-            onClick={scanRepos}
+            onClick={proceedToPickOperation}
             disabled={isLoading || selectedRepoIds.length === 0}
             className="rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-medium transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isLoading ? "Scanning..." : "Scan for license year"}
+            Continue
           </button>
         </div>
       </div>

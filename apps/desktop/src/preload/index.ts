@@ -26,6 +26,8 @@ contextBridge.exposeInMainWorld("api", {
     operationId: string
   ): Promise<SubmitResult> => ipcRenderer.invoke("engine:applyDiff", { diff, overrides, operationId }),
 
+  listOperations: () => ipcRenderer.invoke("engine:listOperations"),
+
   fetchMembers: (namespace: string): Promise<Member[]> => ipcRenderer.invoke("engine:fetchMembers", namespace),
 
   autoLogin: (): Promise<{ namespaces: Namespace[]; provider: Provider; } | null> => ipcRenderer.invoke("auth:auto-login"),

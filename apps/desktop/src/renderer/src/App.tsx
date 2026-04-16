@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { useAppStore } from "./stores/app.js";
 import { SetupForm } from "./components/SetupForm.js";
 import { RepoList } from "./components/RepoList.js";
+import { OperationPicker } from "./components/OperationPicker.js";
 import { DiffReview } from "./components/DiffReview.js";
 import { ResultPanel } from "./components/ResultPanel.js";
 
@@ -31,6 +32,7 @@ export function App() {
       <main className="mx-auto max-w-4xl px-6 py-8">
         {step === "connect" && <SetupForm />}
         {step === "repos" && <RepoList />}
+        {step === "pick-operation" && <OperationPicker />}
         {step === "diffs" && <DiffReview />}
         {step === "results" && <ResultPanel />}
       </main>

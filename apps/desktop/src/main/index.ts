@@ -19,6 +19,7 @@ import {
   handleGitLabOAuthCallback,
   type ApplyDiffOptions
 } from "./handlers.ts";
+import { listOperations, type OperationInfo } from "./operation-registry.ts";
 
 interface AuthenticateOptions {
   token: string;
@@ -240,6 +241,8 @@ app.whenReady().then(() => {
 
     return handleApplyDiff(currentAdapter, { diff, overrides, operationId }).catch(toError);
   });
+
+  ipcMain.handle("engine:listOperations", (): OperationInfo[] => listOperations());
 
   ipcMain.handle("engine:fetchMembers", async(_event, namespace: string) => {
     if (currentAdapter === null) {

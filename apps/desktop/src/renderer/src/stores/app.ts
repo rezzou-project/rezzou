@@ -58,6 +58,7 @@ interface AppActions {
   toggleRepo: (id: string) => void;
   selectAll: () => void;
   deselectAll: () => void;
+  proceedToPickOperation: () => void;
   setSelectedOperation: (id: string) => void;
   scanRepos: () => Promise<void>;
   setOperationOverrides: (overrides: Partial<OperationOverrides>) => void;
@@ -166,6 +167,10 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
 
     deselectAll: () => {
       set({ selectedRepoIds: [] });
+    },
+
+    proceedToPickOperation: () => {
+      set({ step: "pick-operation" });
     },
 
     setSelectedOperation: (id: string) => {
