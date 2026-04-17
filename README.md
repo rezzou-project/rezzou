@@ -9,6 +9,7 @@ Bulk maintenance operations across GitHub and GitLab repositories.
 | [`@rezzou/core`](./packages/core) | Core types, interfaces, and engine |
 | [`@rezzou/operations`](./packages/operations) | Built-in operations |
 | [`@rezzou/providers`](./packages/providers) | Provider adapters |
+| [`@rezzou/sdk`](./packages/sdk) | SDK for building custom operations |
 
 ## Apps
 

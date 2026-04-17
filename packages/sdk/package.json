@@ -1,7 +1,7 @@
 {
-  "name": "@rezzou/core",
+  "name": "@rezzou/sdk",
   "version": "0.1.0",
-  "description": "Core types, interfaces, and engine for Rezzou",
+  "description": "SDK for building custom Rezzou operations",
   "author": "Pierre Demailly <pierredemailly.pro@gmail.com>",
   "license": "MIT",
   "type": "module",
@@ -27,6 +27,10 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/rezzou-project/rezzou.git",
-    "directory": "packages/core"
-  }
+    "directory": "packages/sdk"
+  },
+  "dependencies": {
+    "@rezzou/core": "*"
+  },
+  "peerDependencies": {}
 }

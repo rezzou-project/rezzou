@@ -4,6 +4,7 @@
     { "path": "packages/core" },
     { "path": "packages/providers" },
     { "path": "packages/operations" },
+    { "path": "packages/sdk" },
     { "path": "apps/desktop" }
   ]
 }
