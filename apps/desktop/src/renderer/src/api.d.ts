@@ -1,4 +1,4 @@
-import type { Repo, RepoDiff, SubmitResult, Provider, Namespace, OperationOverrides, Member } from "@rezzou/core";
+import type { Repo, RepoDiff, SubmitResult, Provider, Namespace, Member, OperationDefaults, OperationOverrides } from "@rezzou/core";
 
 declare global {
   interface Window {
@@ -6,9 +6,10 @@ declare global {
       autoLogin(): Promise<{ namespaces: Namespace[]; provider: Provider; } | null>;
       authenticate(token: string, provider: Provider): Promise<Namespace[]>;
       loadRepos(namespace: string): Promise<Repo[]>;
-      scanRepos(repos: Repo[], operationId: string): Promise<RepoDiff[]>;
-      applyDiff(diff: RepoDiff, overrides: OperationOverrides, operationId: string): Promise<SubmitResult>;
-      listOperations(): Promise<{ id: string; name: string; description: string; filePath: string; }[]>;
+      scanRepos(repos: Repo[], operationId: string, inputs: Record<string, unknown>): Promise<RepoDiff[]>;
+      applyDiff(diff: RepoDiff, options: { inputs: Record<string, unknown>; operationId: string; overrides?: OperationOverrides; }): Promise<SubmitResult>;
+      listOperations(): Promise<{ id: string; name: string; description: string; }[]>;
+      getOperationDefaults(operationId: string, inputs: Record<string, unknown>): Promise<OperationDefaults>;
       fetchMembers(namespace: string): Promise<Member[]>;
       startGitHubOAuth(): Promise<{ user_code: string; verification_uri: string; }>;
       startGitLabOAuth(): Promise<void>;

@@ -2,9 +2,6 @@
 import { create } from "zustand";
 import type { Provider, Namespace, Repo, RepoDiff as BaseRepoDiff, SubmitResult, OperationOverrides } from "@rezzou/core";
 
-// Import Internal Dependencies
-import { licenseYearOperation } from "@rezzou/operations";
-
 type Step = "connect" | "repos" | "pick-operation" | "diffs" | "results";
 
 function ipcErrorMessage(error: unknown, fallback: string): string {
@@ -44,7 +41,10 @@ interface AppState {
   selectedRepoIds: string[];
   selectedOperationId: string;
   diffs: RepoDiff[];
+  operationInputs: Record<string, unknown>;
   operationOverrides: OperationOverrides;
+  applyModalTarget: "single" | "all" | null;
+  applyModalRepoPath: string | null;
   isLoading: boolean;
   error: string | null;
 }
@@ -62,7 +62,11 @@ interface AppActions {
   backToPickOperation: () => void;
   setSelectedOperation: (id: string) => void;
   scanRepos: () => Promise<void>;
+  setOperationInputs: (inputs: Record<string, unknown>) => void;
   setOperationOverrides: (overrides: Partial<OperationOverrides>) => void;
+  openApplyModal: (target: "single" | "all", repoPath?: string) => Promise<void>;
+  closeApplyModal: () => void;
+  confirmApply: () => Promise<void>;
   applyDiff: (repoPath: string) => Promise<void>;
   applyAll: () => Promise<void>;
   reset: () => void;
@@ -78,13 +82,10 @@ const kInitialState: AppState = {
   selectedRepoIds: [],
   selectedOperationId: "license-year",
   diffs: [],
-  operationOverrides: {
-    branchName: licenseYearOperation.branchName,
-    commitMessage: licenseYearOperation.commitMessage,
-    prTitle: licenseYearOperation.prTitle,
-    prDescription: licenseYearOperation.prDescription,
-    reviewers: licenseYearOperation.reviewers
-  },
+  operationInputs: {},
+  operationOverrides: {},
+  applyModalTarget: null,
+  applyModalRepoPath: null,
   isLoading: false,
   error: null
 };
@@ -179,7 +180,11 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
     },
 
     setSelectedOperation: (id: string) => {
-      set({ selectedOperationId: id });
+      set({ selectedOperationId: id, operationInputs: {}, operationOverrides: {} });
+    },
+
+    setOperationInputs: (inputs: Record<string, unknown>) => {
+      set({ operationInputs: inputs });
     },
 
     setOperationOverrides: (overrides: Partial<OperationOverrides>) => {
@@ -188,13 +193,34 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
       });
     },
 
+    openApplyModal: async(target: "single" | "all", repoPath?: string) => {
+      const { selectedOperationId, operationInputs } = get();
+      const defaults = await window.api.getOperationDefaults(selectedOperationId, operationInputs);
+      set({ applyModalTarget: target, applyModalRepoPath: repoPath ?? null, operationOverrides: defaults });
+    },
+
+    closeApplyModal: () => {
+      set({ applyModalTarget: null, applyModalRepoPath: null });
+    },
+
+    confirmApply: async() => {
+      const { applyModalTarget, applyModalRepoPath } = get();
+      set({ applyModalTarget: null, applyModalRepoPath: null });
+      if (applyModalTarget === "single" && applyModalRepoPath !== null) {
+        await get().applyDiff(applyModalRepoPath);
+      }
+      else if (applyModalTarget === "all") {
+        await get().applyAll();
+      }
+    },
+
     scanRepos: async() => {
-      const { repos, selectedRepoIds, selectedOperationId } = get();
+      const { repos, selectedRepoIds, selectedOperationId, operationInputs } = get();
 
       set({ isLoading: true, error: null });
 
       const selectedRepos = repos.filter((repo) => selectedRepoIds.includes(repo.id));
-      const baseDiffs = await window.api.scanRepos(selectedRepos, selectedOperationId);
+      const baseDiffs = await window.api.scanRepos(selectedRepos, selectedOperationId, operationInputs);
       const diffs: RepoDiff[] = baseDiffs.map((diff) => {
         return {
           ...diff,
@@ -206,7 +232,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
     },
 
     applyDiff: async(repoPath: string) => {
-      const { diffs, operationOverrides, selectedOperationId } = get();
+      const { diffs, operationInputs, operationOverrides, selectedOperationId } = get();
 
       const diffIndex = diffs.findIndex((diff) => diff.repo.fullPath === repoPath);
       if (diffIndex === -1) {
@@ -223,7 +249,10 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
       });
 
       try {
-        const result: SubmitResult = await window.api.applyDiff(diff, operationOverrides, selectedOperationId);
+        const result: SubmitResult = await window.api.applyDiff(
+          diff,
+          { inputs: operationInputs, operationId: selectedOperationId, overrides: operationOverrides }
+        );
 
         set((state) => {
           const updatedDiffs = [...state.diffs];

@@ -15,6 +15,7 @@ const kCreateCommitMutation = `
 `;
 
 export class GitHubAdapter extends BaseProvider {
+  readonly provider = "github" as const;
   #client: InstanceType<typeof Octokit>;
   #namespaces = new Map<string, NamespaceType>();
 

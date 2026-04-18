@@ -1,7 +1,8 @@
 // Import Third-party Dependencies
-import type { ProviderAdapter, Repo, FileContent, SubmitParams, SubmitResult, Member, Namespace } from "@rezzou/core";
+import type { Provider, ProviderAdapter, Repo, FileContent, SubmitParams, SubmitResult, Member, Namespace } from "@rezzou/core";
 
 export abstract class BaseProvider implements ProviderAdapter {
+  abstract readonly provider: Provider;
   abstract listNamespaces(): Promise<Namespace[]>;
   abstract listRepos(namespace: string): Promise<Repo[]>;
   abstract getFile(repoPath: string, filePath: string, branch: string): Promise<FileContent | null>;

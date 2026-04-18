@@ -12,12 +12,14 @@ import {
   handleLoadRepos,
   handleScanRepos,
   handleApplyDiff,
+  handleGetOperationDefaults,
   handleFetchMembers,
   handleGitHubDeviceStart,
   handleGitHubDevicePoll,
   handleGitLabOAuthStart,
   handleGitLabOAuthCallback,
-  type ApplyDiffOptions
+  type ApplyDiffOptions,
+  type GetOperationDefaultsOptions
 } from "./handlers.ts";
 import { listOperations, type OperationInfo } from "./operation-registry.ts";
 
@@ -29,6 +31,7 @@ interface AuthenticateOptions {
 interface ScanReposPayload {
   repos: Repo[];
   operationId: string;
+  inputs: Record<string, unknown>;
 }
 
 // CONSTANTS
@@ -225,24 +228,37 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle("engine:scanRepos", async(_event, payload: ScanReposPayload): Promise<RepoDiff[]> => {
-    const { repos, operationId } = payload;
+    const { repos, operationId, inputs } = payload;
     if (currentAdapter === null) {
       throw new Error("Not connected");
     }
 
-    return handleScanRepos(currentAdapter, repos, operationId).catch(toError);
+    return handleScanRepos(
+      currentAdapter,
+      repos,
+      {
+        operationId,
+        inputs
+      }
+    ).catch(toError);
   });
 
   ipcMain.handle("engine:applyDiff", async(_event, payload: ApplyDiffOptions) => {
-    const { diff, overrides, operationId } = payload;
+    const { diff, inputs, operationId, overrides } = payload;
     if (currentAdapter === null) {
       throw new Error("Not connected");
     }
 
-    return handleApplyDiff(currentAdapter, { diff, overrides, operationId }).catch(toError);
+    return handleApplyDiff(currentAdapter, { diff, inputs, operationId, overrides }).catch(toError);
   });
 
   ipcMain.handle("engine:listOperations", (): OperationInfo[] => listOperations());
+
+  ipcMain.handle("engine:getOperationDefaults", (_event, payload: GetOperationDefaultsOptions) => {
+    const { operationId, inputs } = payload;
+
+    return handleGetOperationDefaults({ operationId, inputs });
+  });
 
   ipcMain.handle("engine:fetchMembers", async(_event, namespace: string) => {
     if (currentAdapter === null) {

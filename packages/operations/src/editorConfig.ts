@@ -1,5 +1,5 @@
 // Import Third-party Dependencies
-import type { Operation } from "@rezzou/core";
+import type { Operation, RepoContext } from "@rezzou/core";
 
 // CONSTANTS
 const kTemplate = `root = true
@@ -13,22 +13,28 @@ charset = utf-8
 trim_trailing_whitespace = true
 `;
 
-function applyEditorConfig(content: string): string | null {
-  if (content.length > 0) {
-    return null;
-  }
-
-  return kTemplate;
-}
-
 export const editorConfigOperation = {
+  id: "editorconfig",
   name: "EditorConfig",
   description: "Drop a standard .editorconfig if none exists",
-  filePath: ".editorconfig",
-  branchName: "rezzou/editorconfig",
-  commitMessage: "chore: add .editorconfig",
-  prTitle: "chore: add .editorconfig",
-  prDescription: "Automated creation of a standard .editorconfig, performed by Rezzou.",
-  reviewers: [],
-  apply: applyEditorConfig
+
+  async apply(ctx: RepoContext, _inputs: Record<string, unknown>) {
+    const content = await ctx.readFile(".editorconfig");
+    if (content !== null && content.length > 0) {
+      return null;
+    }
+
+    return [
+      {
+        action: content === null ? "create" : "update",
+        path: ".editorconfig",
+        content: kTemplate
+      }
+    ];
+  },
+
+  branchName: () => "rezzou/editorconfig",
+  commitMessage: () => "chore: add .editorconfig",
+  prTitle: () => "chore: add .editorconfig",
+  prDescription: () => "Automated creation of a standard .editorconfig, performed by Rezzou."
 } satisfies Operation;

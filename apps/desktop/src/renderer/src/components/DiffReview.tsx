@@ -59,20 +59,23 @@ function filterDiffContext(lines: DiffLine[]): DiffLine[] {
 }
 
 function DiffCard({ diff }: { diff: RepoDiff; }) {
-  const { applyDiff } = useAppStore();
-  const lineDiff = filterDiffContext(computeLineDiff(diff.original, diff.updated));
+  const { openApplyModal } = useAppStore();
+  const patch = diff.patches[0];
+  const original = patch.action !== "create" ? (diff.originals[patch.path] ?? "") : "";
+  const updated = patch.content ?? "";
+  const lineDiff = filterDiffContext(computeLineDiff(original, updated));
 
   return (
     <div className="rounded-lg border border-gray-800 bg-gray-900">
       <div className="flex items-center justify-between border-b border-gray-800 px-4 py-3">
         <div>
           <span className="text-sm font-medium">{diff.repo.name}</span>
-          <span className="ml-2 text-xs text-gray-500">{diff.filePath}</span>
+          <span className="ml-2 text-xs text-gray-500">{patch.path}</span>
         </div>
 
         {diff.applyStatus === "pending" && (
           <button
-            onClick={() => applyDiff(diff.repo.fullPath)}
+            onClick={() => void openApplyModal("single", diff.repo.fullPath)}
             className="rounded border border-green-700 px-3 py-1 text-xs text-green-400 transition-colors hover:bg-green-950"
           >
             Apply
@@ -221,72 +224,111 @@ function ReviewerSelect({ members, isLoading, selected, onChange }: ReviewerSele
   );
 }
 
-function OperationForm() {
-  const { operationOverrides, setOperationOverrides, selectedNamespace } = useAppStore();
+function ApplyModal() {
+  const {
+    applyModalTarget,
+    applyModalRepoPath,
+    diffs,
+    operationOverrides,
+    setOperationOverrides,
+    closeApplyModal,
+    confirmApply,
+    selectedNamespace
+  } = useAppStore();
   const [members, setMembers] = useState<Member[]>([]);
   const [isFetchingMembers, setIsFetchingMembers] = useState(false);
 
+  const pendingCount = diffs.filter((d) => d.applyStatus === "pending").length;
+  const targetDiff = diffs.find((d) => d.repo.fullPath === applyModalRepoPath) ?? null;
+
   useEffect(() => {
-    if (selectedNamespace?.type === "org") {
+    if (applyModalTarget !== null && selectedNamespace?.type === "org") {
       setIsFetchingMembers(true);
       window.api.fetchMembers(selectedNamespace.name)
         .then(setMembers)
         .catch(() => setMembers([]))
         .finally(() => setIsFetchingMembers(false));
     }
-  }, [selectedNamespace]);
+  }, [applyModalTarget, selectedNamespace]);
+
+  if (applyModalTarget === null) {
+    return null;
+  }
+
+  const title = applyModalTarget === "all"
+    ? `Apply to all (${pendingCount})`
+    : `Apply to ${targetDiff?.repo.name ?? ""}`;
 
   return (
-    <div className="mb-6 rounded-lg border border-gray-800 bg-gray-900 p-4">
-      <h3 className="mb-4 text-sm font-medium text-gray-300">Commit settings</h3>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="flex flex-col gap-1">
-          <label className="text-xs text-gray-500">Branch name</label>
-          <input
-            type="text"
-            value={operationOverrides.branchName}
-            onChange={(e) => setOperationOverrides({ branchName: e.target.value })}
-            className="rounded border border-gray-700 bg-gray-800 px-3 py-1.5 text-xs text-gray-200 focus:border-gray-500 focus:outline-none"
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-xs text-gray-500">Commit message</label>
-          <input
-            type="text"
-            value={operationOverrides.commitMessage}
-            onChange={(e) => setOperationOverrides({ commitMessage: e.target.value })}
-            className="rounded border border-gray-700 bg-gray-800 px-3 py-1.5 text-xs text-gray-200 focus:border-gray-500 focus:outline-none"
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-xs text-gray-500">PR / MR title</label>
-          <input
-            type="text"
-            value={operationOverrides.prTitle}
-            onChange={(e) => setOperationOverrides({ prTitle: e.target.value })}
-            className="rounded border border-gray-700 bg-gray-800 px-3 py-1.5 text-xs text-gray-200 focus:border-gray-500 focus:outline-none"
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-xs text-gray-500">PR / MR description</label>
-          <input
-            type="text"
-            value={operationOverrides.prDescription}
-            onChange={(e) => setOperationOverrides({ prDescription: e.target.value })}
-            className="rounded border border-gray-700 bg-gray-800 px-3 py-1.5 text-xs text-gray-200 focus:border-gray-500 focus:outline-none"
-          />
-        </div>
-        {selectedNamespace?.type === "org" && (
-          <div className="col-span-2 flex flex-col gap-1">
-            <label className="text-xs text-gray-500">Reviewers <span className="text-gray-600">(optional)</span></label>
-            <ReviewerSelect
-              members={members}
-              isLoading={isFetchingMembers}
-              selected={operationOverrides.reviewers}
-              onChange={(reviewers) => setOperationOverrides({ reviewers })}
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="w-full max-w-lg rounded-xl border border-gray-800 bg-gray-950 p-6 shadow-2xl">
+        <h3 className="mb-1 text-base font-semibold">{title}</h3>
+        <p className="mb-5 text-xs text-gray-500">Review the commit settings before submitting.</p>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-gray-500">Branch name</label>
+            <input
+              type="text"
+              value={operationOverrides.branchName ?? ""}
+              onChange={(e) => setOperationOverrides({ branchName: e.target.value })}
+              className="rounded border border-gray-700 bg-gray-800 px-3 py-1.5 text-xs text-gray-200 focus:border-gray-500 focus:outline-none"
             />
           </div>
-        )}
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-gray-500">Commit message</label>
+            <input
+              type="text"
+              value={operationOverrides.commitMessage ?? ""}
+              onChange={(e) => setOperationOverrides({ commitMessage: e.target.value })}
+              className="rounded border border-gray-700 bg-gray-800 px-3 py-1.5 text-xs text-gray-200 focus:border-gray-500 focus:outline-none"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-gray-500">PR / MR title</label>
+            <input
+              type="text"
+              value={operationOverrides.prTitle ?? ""}
+              onChange={(e) => setOperationOverrides({ prTitle: e.target.value })}
+              className="rounded border border-gray-700 bg-gray-800 px-3 py-1.5 text-xs text-gray-200 focus:border-gray-500 focus:outline-none"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-gray-500">PR / MR description</label>
+            <input
+              type="text"
+              value={operationOverrides.prDescription ?? ""}
+              onChange={(e) => setOperationOverrides({ prDescription: e.target.value })}
+              className="rounded border border-gray-700 bg-gray-800 px-3 py-1.5 text-xs text-gray-200 focus:border-gray-500 focus:outline-none"
+            />
+          </div>
+          {selectedNamespace?.type === "org" && (
+            <div className="col-span-2 flex flex-col gap-1">
+              <label className="text-xs text-gray-500">Reviewers <span className="text-gray-600">(optional)</span></label>
+              <ReviewerSelect
+                members={members}
+                isLoading={isFetchingMembers}
+                selected={operationOverrides.reviewers ?? []}
+                onChange={(reviewers) => setOperationOverrides({ reviewers })}
+              />
+            </div>
+          )}
+        </div>
+
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            onClick={closeApplyModal}
+            className="rounded-lg border border-gray-700 px-4 py-1.5 text-sm font-medium transition-colors hover:border-gray-500"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => void confirmApply()}
+            className="rounded-lg bg-green-700 px-4 py-1.5 text-sm font-medium transition-colors hover:bg-green-600"
+          >
+            {applyModalTarget === "all" ? `Apply all (${pendingCount})` : "Apply"}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -296,16 +338,14 @@ interface OperationInfo {
   id: string;
   name: string;
   description: string;
-  filePath: string;
 }
 
 export function DiffReview() {
-  const { diffs, applyAll, backToPickOperation, selectedOperationId } = useAppStore();
+  const { diffs, openApplyModal, backToPickOperation, selectedOperationId } = useAppStore();
   const [selectedOp, setSelectedOp] = useState<OperationInfo | null>(null);
   const pendingCount = diffs.filter((diff) => diff.applyStatus === "pending").length;
   const doneCount = diffs.filter((diff) => diff.applyStatus === "done").length;
   const isApplying = diffs.some((diff) => diff.applyStatus === "applying");
-  const isConfigurable = doneCount === 0 && !isApplying;
 
   useEffect(() => {
     void window.api.listOperations().then((ops) => {
@@ -316,9 +356,7 @@ export function DiffReview() {
   if (diffs.length === 0) {
     return (
       <div className="pt-20 text-center">
-        <p className="mb-4 text-gray-400">
-          No {selectedOp?.filePath ?? "files"} need updating.
-        </p>
+        <p className="mb-4 text-gray-400">No files need updating.</p>
         <button
           onClick={backToPickOperation}
           className="rounded-lg border border-gray-700 px-4 py-2 text-sm font-medium transition-colors hover:border-gray-500"
@@ -331,9 +369,11 @@ export function DiffReview() {
 
   return (
     <div>
+      <ApplyModal />
+
       <div className="mb-6 flex items-center justify-between">
         <div>
-          {isConfigurable && (
+          {doneCount === 0 && !isApplying && (
             <button
               onClick={backToPickOperation}
               className="mb-1 text-xs text-gray-500 transition-colors hover:text-gray-300"
@@ -343,13 +383,13 @@ export function DiffReview() {
           )}
           <h2 className="text-xl font-semibold">{selectedOp?.name ?? "Updates"}</h2>
           <p className="text-sm text-gray-400">
-            {diffs.length} files to update · {doneCount} done
+            {diffs.length} repos to update · {doneCount} done
           </p>
         </div>
 
-        {pendingCount > 0 && !isConfigurable && (
+        {pendingCount > 0 && (
           <button
-            onClick={applyAll}
+            onClick={() => void openApplyModal("all")}
             disabled={isApplying}
             className="rounded-lg bg-green-700 px-4 py-1.5 text-sm font-medium transition-colors hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -357,19 +397,6 @@ export function DiffReview() {
           </button>
         )}
       </div>
-
-      {isConfigurable && <OperationForm />}
-
-      {isConfigurable && (
-        <div className="mb-6 flex justify-end">
-          <button
-            onClick={applyAll}
-            className="rounded-lg bg-green-700 px-4 py-1.5 text-sm font-medium transition-colors hover:bg-green-600"
-          >
-            Apply all ({pendingCount})
-          </button>
-        </div>
-      )}
 
       <div className="flex flex-col gap-4">
         {diffs.map((diff) => (

@@ -2,8 +2,30 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
+// Import Third-party Dependencies
+import type { RepoContext, Repo } from "@rezzou/core";
+
 // Import Internal Dependencies
 import { licenseYearOperation, CURRENT_YEAR } from "../licenseYear.ts";
+
+// CONSTANTS
+const kRepo: Repo = {
+  id: "1",
+  name: "my-repo",
+  fullPath: "ns/my-repo",
+  defaultBranch: "main",
+  url: "https://example.com/ns/my-repo"
+};
+
+function makeCtx(content: string | null): RepoContext {
+  return {
+    repo: kRepo,
+    provider: "gitlab",
+    readFile: async() => content,
+    listFiles: async() => [],
+    exists: async() => content !== null
+  };
+}
 
 describe("UT CURRENT_YEAR", () => {
   it("should equal the current calendar year", () => {
@@ -12,80 +34,105 @@ describe("UT CURRENT_YEAR", () => {
 });
 
 describe("UT licenseYearOperation", () => {
-  it("should have LICENSE as filePath", () => {
-    assert.equal(licenseYearOperation.filePath, "LICENSE");
+  it("should have 'license-year' as id", () => {
+    assert.equal(licenseYearOperation.id, "license-year");
   });
 
   it("should include current year in branchName", () => {
-    assert.equal(licenseYearOperation.branchName, `rezzou/license-year-${CURRENT_YEAR}`);
+    assert.equal(licenseYearOperation.branchName({}), `rezzou/license-year-${CURRENT_YEAR}`);
   });
 
   it("should include current year in commitMessage", () => {
-    assert.equal(licenseYearOperation.commitMessage, `chore: update license year to ${CURRENT_YEAR}`);
+    assert.equal(licenseYearOperation.commitMessage({}), `chore: update license year to ${CURRENT_YEAR}`);
   });
 
   it("should include current year in prTitle", () => {
-    assert.equal(licenseYearOperation.prTitle, `chore: update license year to ${CURRENT_YEAR}`);
+    assert.equal(licenseYearOperation.prTitle({}), `chore: update license year to ${CURRENT_YEAR}`);
   });
 
   it("should include current year in prDescription", () => {
-    assert.match(licenseYearOperation.prDescription, new RegExp(CURRENT_YEAR));
+    assert.match(licenseYearOperation.prDescription({}), new RegExp(CURRENT_YEAR));
+  });
+
+  it("should use provided year in branchName", () => {
+    assert.equal(licenseYearOperation.branchName({ year: 2030 }), "rezzou/license-year-2030");
   });
 
   describe("apply", () => {
-    it("should return null when content has no copyright pattern", () => {
-      const result = licenseYearOperation.apply("MIT License\nPermission is hereby granted");
+    it("should return null when file does not exist", async() => {
+      const result = await licenseYearOperation.apply(makeCtx(null), {});
 
       assert.equal(result, null);
     });
 
-    it("should return null when single year is already current year", () => {
-      const result = licenseYearOperation.apply(`Copyright ${CURRENT_YEAR}`);
+    it("should return null when content has no copyright pattern", async() => {
+      const result = await licenseYearOperation.apply(makeCtx("MIT License\nPermission is hereby granted"), {});
 
       assert.equal(result, null);
     });
 
-    it("should return null when range end year is already current year", () => {
-      const result = licenseYearOperation.apply(`Copyright 2020-${CURRENT_YEAR}`);
+    it("should return null when single year is already current year", async() => {
+      const result = await licenseYearOperation.apply(makeCtx(`Copyright ${CURRENT_YEAR}`), {});
 
       assert.equal(result, null);
     });
 
-    it("should update single year to range ending with current year", () => {
-      const result = licenseYearOperation.apply("Copyright 2020\nSome license text");
+    it("should return null when range end year is already current year", async() => {
+      const result = await licenseYearOperation.apply(makeCtx(`Copyright 2020-${CURRENT_YEAR}`), {});
 
-      assert.equal(result, `Copyright 2020-${CURRENT_YEAR}\nSome license text`);
+      assert.equal(result, null);
     });
 
-    it("should update outdated range end year to current year", () => {
-      const result = licenseYearOperation.apply("Copyright 2020-2024\nSome license text");
+    it("should update single year to range ending with current year", async() => {
+      const result = await licenseYearOperation.apply(makeCtx("Copyright 2020\nSome license text"), {});
 
-      assert.equal(result, `Copyright 2020-${CURRENT_YEAR}\nSome license text`);
+      assert.ok(result !== null);
+      assert.equal(result[0].content, `Copyright 2020-${CURRENT_YEAR}\nSome license text`);
+      assert.equal(result[0].action, "update");
+      assert.equal(result[0].path, "LICENSE");
     });
 
-    it("should handle Copyright (C) prefix", () => {
-      const result = licenseYearOperation.apply("Copyright (C) 2020");
+    it("should update outdated range end year to current year", async() => {
+      const result = await licenseYearOperation.apply(makeCtx("Copyright 2020-2024\nSome license text"), {});
 
-      assert.equal(result, `Copyright (C) 2020-${CURRENT_YEAR}`);
+      assert.ok(result !== null);
+      assert.equal(result[0].content, `Copyright 2020-${CURRENT_YEAR}\nSome license text`);
     });
 
-    it("should handle Copyright (c) lowercase prefix", () => {
-      const result = licenseYearOperation.apply("Copyright (c) 2020-2024");
+    it("should handle Copyright (C) prefix", async() => {
+      const result = await licenseYearOperation.apply(makeCtx("Copyright (C) 2020"), {});
 
-      assert.equal(result, `Copyright (c) 2020-${CURRENT_YEAR}`);
+      assert.ok(result !== null);
+      assert.equal(result[0].content, `Copyright (C) 2020-${CURRENT_YEAR}`);
     });
 
-    it("should handle case insensitive copyright keyword", () => {
-      const result = licenseYearOperation.apply("copyright 2020");
+    it("should handle Copyright (c) lowercase prefix", async() => {
+      const result = await licenseYearOperation.apply(makeCtx("Copyright (c) 2020-2024"), {});
 
-      assert.equal(result, `copyright 2020-${CURRENT_YEAR}`);
+      assert.ok(result !== null);
+      assert.equal(result[0].content, `Copyright (c) 2020-${CURRENT_YEAR}`);
     });
 
-    it("should only update the copyright line when content has multiple lines", () => {
+    it("should handle case insensitive copyright keyword", async() => {
+      const result = await licenseYearOperation.apply(makeCtx("copyright 2020"), {});
+
+      assert.ok(result !== null);
+      assert.equal(result[0].content, `copyright 2020-${CURRENT_YEAR}`);
+    });
+
+    it("should only update the copyright line when content has multiple lines", async() => {
       const content = "MIT License\n\nCopyright 2020 Acme Corp\n\nPermission is hereby granted";
-      const result = licenseYearOperation.apply(content);
+      const result = await licenseYearOperation.apply(makeCtx(content), {});
 
-      assert.equal(result, `MIT License\n\nCopyright 2020-${CURRENT_YEAR} Acme Corp\n\nPermission is hereby granted`);
+      assert.ok(result !== null);
+      assert.equal(result[0].content, `MIT License\n\nCopyright 2020-${CURRENT_YEAR} Acme Corp\n\nPermission is hereby granted`);
+    });
+
+    it("should use provided year input instead of current year", async() => {
+      const result = await licenseYearOperation.apply(makeCtx("Copyright 2020\nSome text"), { year: 2030 });
+
+      assert.ok(result !== null);
+      assert.equal(result[0].content, "Copyright 2020-2030\nSome text");
     });
   });
 });
