@@ -3,15 +3,26 @@ import { useAppStore } from "../stores/app.js";
 
 export function ResultPanel() {
   const diffs = useAppStore((state) => state.diffs);
+  const backToPickOperation = useAppStore((state) => state.backToPickOperation);
   const successDiffs = diffs.filter((diff) => diff.applyStatus === "done");
   const errorDiffs = diffs.filter((diff) => diff.applyStatus === "error");
 
   return (
     <div>
-      <h2 className="mb-2 text-xl font-semibold">Done</h2>
-      <p className="mb-8 text-sm text-gray-400">
-        {successDiffs.length} MRs created · {errorDiffs.length} errors
-      </p>
+      <div className="mb-8 flex items-start justify-between">
+        <div>
+          <h2 className="mb-2 text-xl font-semibold">Done</h2>
+          <p className="text-sm text-gray-400">
+            {successDiffs.length} MRs created · {errorDiffs.length} errors
+          </p>
+        </div>
+        <button
+          onClick={backToPickOperation}
+          className="rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-300 hover:border-gray-500 hover:text-white transition-colors"
+        >
+          ← Back
+        </button>
+      </div>
 
       {successDiffs.length > 0 && (
         <div className="mb-6">
