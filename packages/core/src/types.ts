@@ -6,6 +6,7 @@ export interface Namespace {
   name: string;
   displayName: string;
   type: NamespaceType;
+  avatarUrl?: string;
 }
 
 export interface Repo {
