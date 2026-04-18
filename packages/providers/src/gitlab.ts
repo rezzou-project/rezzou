@@ -21,13 +21,20 @@ export class GitLabAdapter extends BaseProvider {
     ]);
 
     return [
-      { id: String(user.id), name: String(user.username), displayName: String(user.name), type: "user" },
+      {
+        id: String(user.id),
+        name: String(user.username),
+        displayName: String(user.name),
+        type: "user",
+        avatarUrl: user.avatar_url ? String(user.avatar_url) : void 0
+      },
       ...groups.map((group) => {
         return {
           id: String(group.id),
           name: String(group.full_path),
           displayName: String(group.name),
-          type: "org" as NamespaceType
+          type: "org" as NamespaceType,
+          avatarUrl: group.avatar_url ? String(group.avatar_url) : void 0
         };
       })
     ];

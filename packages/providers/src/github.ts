@@ -31,13 +31,20 @@ export class GitHubAdapter extends BaseProvider {
     ]);
 
     const namespaces: Namespace[] = [
-      { id: user.login, name: user.login, displayName: user.name ?? user.login, type: "user" },
+      {
+        id: user.login,
+        name: user.login,
+        displayName: user.name ?? user.login,
+        type: "user",
+        avatarUrl: user.avatar_url
+      },
       ...orgs.map((org) => {
         return {
           id: org.login,
           name: org.login,
           displayName: org.login,
-          type: "org" as NamespaceType
+          type: "org" as NamespaceType,
+          avatarUrl: org.avatar_url
         };
       })
     ];

@@ -2,7 +2,7 @@
 import { create } from "zustand";
 import type { Provider, Namespace, Repo, RepoDiff as BaseRepoDiff, SubmitResult, OperationOverrides } from "@rezzou/core";
 
-type Step = "connect" | "repos" | "pick-operation" | "diffs" | "results";
+type Step = "connect" | "home" | "repos" | "pick-operation" | "diffs" | "results";
 
 function ipcErrorMessage(error: unknown, fallback: string): string {
   if (!(error instanceof Error)) {
@@ -26,17 +26,12 @@ export interface RepoDiff extends BaseRepoDiff {
   error?: string;
 }
 
-interface AutoLoginUser {
-  displayName: string;
-  provider: Provider;
-}
-
 interface AppState {
   step: Step;
   provider: Provider;
-  autoLoginUser: AutoLoginUser | null;
   namespaces: Namespace[];
   selectedNamespace: Namespace | null;
+  repoCounts: Record<string, number>;
   repos: Repo[];
   selectedRepoIds: string[];
   selectedOperationId: string;
@@ -51,9 +46,9 @@ interface AppState {
 
 interface AppActions {
   autoLogin: () => Promise<void>;
-  continueWithSavedAccount: () => void;
   authenticate: (token: string, provider: Provider) => Promise<void>;
   receiveOAuthResult: (namespaces: Namespace[], provider: Provider) => void;
+  goHome: () => void;
   loadRepos: (namespace: Namespace) => Promise<void>;
   toggleRepo: (id: string) => void;
   selectAll: () => void;
@@ -75,9 +70,9 @@ interface AppActions {
 const kInitialState: AppState = {
   step: "connect",
   provider: "gitlab",
-  autoLoginUser: null,
   namespaces: [],
   selectedNamespace: null,
+  repoCounts: {},
   repos: [],
   selectedRepoIds: [],
   selectedOperationId: "license-year",
@@ -97,16 +92,8 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
     autoLogin: async() => {
       const result = await window.api.autoLogin();
       if (result !== null) {
-        const userNs = result.namespaces.find((ns) => ns.type === "user");
-        const autoLoginUser: AutoLoginUser | null = userNs
-          ? { displayName: userNs.displayName, provider: result.provider }
-          : null;
-        set({ provider: result.provider, namespaces: result.namespaces, autoLoginUser });
+        set({ provider: result.provider, namespaces: result.namespaces, step: "home" });
       }
-    },
-
-    continueWithSavedAccount: () => {
-      set({ autoLoginUser: null });
     },
 
     authenticate: async(token: string, provider: Provider) => {
@@ -115,7 +102,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
       try {
         const namespaces = await window.api.authenticate(token, provider);
 
-        set({ provider, namespaces, isLoading: false });
+        set({ provider, namespaces, isLoading: false, step: "home" });
       }
       catch (authenticateError) {
         set({
@@ -126,7 +113,11 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
     },
 
     receiveOAuthResult: (namespaces: Namespace[], provider: Provider) => {
-      set({ provider, namespaces, isLoading: false, error: null });
+      set({ provider, namespaces, isLoading: false, error: null, step: "home" });
+    },
+
+    goHome: () => {
+      set({ step: "home", selectedNamespace: null, repos: [], selectedRepoIds: [], diffs: [] });
     },
 
     loadRepos: async(namespace: Namespace) => {
@@ -135,12 +126,15 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
       try {
         const repos = await window.api.loadRepos(namespace.name);
 
-        set({
-          step: "repos",
-          selectedNamespace: namespace,
-          repos,
-          selectedRepoIds: repos.map((repo) => repo.id),
-          isLoading: false
+        set((state) => {
+          return {
+            step: "repos",
+            selectedNamespace: namespace,
+            repos,
+            selectedRepoIds: repos.map((repo) => repo.id),
+            isLoading: false,
+            repoCounts: { ...state.repoCounts, [namespace.id]: repos.length }
+          };
         });
       }
       catch (loadReposError) {

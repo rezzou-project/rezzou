@@ -66,7 +66,8 @@ describe("GitLabAdapter", () => {
         id: "42",
         name: "john",
         displayName: "John Doe",
-        type: "user"
+        type: "user",
+        avatarUrl: void 0
       });
     });
 

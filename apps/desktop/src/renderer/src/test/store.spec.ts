@@ -87,14 +87,14 @@ beforeEach(() => {
 });
 
 describe("authenticate", () => {
-  it("should store namespaces and stay on connect step on success", async() => {
+  it("should store namespaces and transition to home step on success", async() => {
     const namespaces: Namespace[] = [kNamespace];
     mockApiAuthenticate.mock.mockImplementation(async() => namespaces);
 
     await getState().authenticate("token", "gitlab");
 
     const state = getState();
-    assert.equal(state.step, "connect");
+    assert.equal(state.step, "home");
     assert.deepEqual(state.namespaces, namespaces);
     assert.equal(state.isLoading, false);
     assert.equal(state.error, null);
@@ -153,7 +153,7 @@ describe("loadRepos", () => {
     assert.deepEqual(getState().selectedRepoIds, ["1", "2"]);
   });
 
-  it("should set error and stay on connect step on failure", async() => {
+  it("should set error and stay on home step on failure", async() => {
     mockApiLoadRepos.mock.mockImplementation(async() => {
       throw new Error("Forbidden");
     });
@@ -161,7 +161,7 @@ describe("loadRepos", () => {
     await getState().loadRepos(kNamespace);
 
     const state = getState();
-    assert.equal(state.step, "connect");
+    assert.equal(state.step, "home");
     assert.equal(state.error, "Forbidden");
     assert.equal(state.isLoading, false);
   });
