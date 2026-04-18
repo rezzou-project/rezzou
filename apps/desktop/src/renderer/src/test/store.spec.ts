@@ -3,7 +3,7 @@ import { describe, it, mock, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 
 // Import Third-party Dependencies
-import type { Repo, RepoDiff, SubmitResult, Namespace } from "@rezzou/core";
+import type { Repo, RepoDiff, SubmitResult, Namespace, OperationOverrides } from "@rezzou/core";
 
 // CONSTANTS
 const kCurrentYear = String(new Date().getFullYear());
@@ -22,9 +22,8 @@ const kNamespace: Namespace = {
 };
 const kDiff: RepoDiff = {
   repo: kRepo,
-  filePath: "LICENSE",
-  original: "Copyright 2020",
-  updated: `Copyright 2020-${kCurrentYear}`
+  patches: [{ action: "update", path: "LICENSE", content: `Copyright 2020-${kCurrentYear}` }],
+  originals: { LICENSE: "Copyright 2020" }
 };
 const kSubmitResult: SubmitResult = {
   prUrl: "https://gitlab.com/ns/my-repo/-/merge_requests/1",
@@ -34,11 +33,22 @@ const kSubmitResult: SubmitResult = {
 const mockApiAutoLogin = mock.fn(async() => null);
 const mockApiAuthenticate = mock.fn(async() => [kNamespace] as Namespace[]);
 const mockApiLoadRepos = mock.fn(async() => [] as Repo[]);
-const mockApiScanRepos = mock.fn(async(_repos: Repo[], _operationId: string): Promise<RepoDiff[]> => []);
-const mockApiApplyDiff = mock.fn(async(_diff: RepoDiff, _overrides: unknown, _operationId: string) => kSubmitResult);
+const mockApiScanRepos = mock.fn(
+  async(_repos: Repo[], _operationId: string, _inputs: Record<string, unknown>): Promise<RepoDiff[]> => []
+);
+const mockApiApplyDiff = mock.fn(
+  async(_diff: RepoDiff, _options: { inputs: unknown; operationId: string; overrides?: OperationOverrides; }) => kSubmitResult
+);
 const mockApiListOperations = mock.fn(
   async() => [{ id: "license-year", name: "License Year", description: "Update copyright year" }]
 );
+const kDefaults = {
+  branchName: "rezzou/license-year-2026",
+  commitMessage: "chore: update license year to 2026",
+  prTitle: "chore: update license year to 2026",
+  prDescription: "Automated update"
+};
+const mockApiGetOperationDefaults = mock.fn(async() => kDefaults);
 
 (globalThis as Record<string, unknown>).window = {
   api: {
@@ -47,7 +57,8 @@ const mockApiListOperations = mock.fn(
     loadRepos: mockApiLoadRepos,
     scanRepos: mockApiScanRepos,
     applyDiff: mockApiApplyDiff,
-    listOperations: mockApiListOperations
+    listOperations: mockApiListOperations,
+    getOperationDefaults: mockApiGetOperationDefaults
   }
 };
 
@@ -72,6 +83,7 @@ beforeEach(() => {
   mockApiScanRepos.mock.resetCalls();
   mockApiListOperations.mock.resetCalls();
   mockApiApplyDiff.mock.resetCalls();
+  mockApiGetOperationDefaults.mock.resetCalls();
 });
 
 describe("authenticate", () => {
@@ -255,6 +267,33 @@ describe("setSelectedOperation", () => {
 
     assert.equal(getState().step, "connect");
   });
+
+  it("should reset operationInputs", () => {
+    getState().setOperationInputs({ year: 2030 });
+    getState().setSelectedOperation("gitignore-maintainer");
+
+    assert.deepEqual(getState().operationInputs, {});
+  });
+
+  it("should reset operationOverrides", () => {
+    getState().setOperationOverrides({ branchName: "custom/branch" });
+    getState().setSelectedOperation("gitignore-maintainer");
+
+    assert.deepEqual(getState().operationOverrides, {});
+  });
+});
+
+describe("setOperationOverrides", () => {
+  it("should update operationOverrides", () => {
+    const overrides: OperationOverrides = { branchName: "custom/branch", reviewers: ["alice"] };
+    getState().setOperationOverrides(overrides);
+
+    assert.deepEqual(getState().operationOverrides, overrides);
+  });
+
+  it("should default to empty object", () => {
+    assert.deepEqual(getState().operationOverrides, {});
+  });
 });
 
 describe("scanRepos", () => {
@@ -296,6 +335,16 @@ describe("scanRepos", () => {
 
     const [, passedOperationId] = mockApiScanRepos.mock.calls[0].arguments;
     assert.equal(passedOperationId, "my-op");
+  });
+
+  it("should pass operationInputs to window.api.scanRepos", async() => {
+    mockApiScanRepos.mock.mockImplementation(async() => []);
+    getState().setOperationInputs({ year: 2030 });
+
+    await getState().scanRepos();
+
+    const [,, passedInputs] = mockApiScanRepos.mock.calls[0].arguments;
+    assert.deepEqual(passedInputs, { year: 2030 });
   });
 });
 
@@ -340,8 +389,19 @@ describe("applyDiff", () => {
 
     await getState().applyDiff(kRepo.fullPath);
 
-    const [, , passedOperationId] = mockApiApplyDiff.mock.calls[0].arguments;
-    assert.equal(passedOperationId, "my-op");
+    const [, passedOptions] = mockApiApplyDiff.mock.calls[0].arguments;
+    assert.equal(passedOptions.operationId, "my-op");
+  });
+
+  it("should pass operationOverrides to window.api.applyDiff", async() => {
+    mockApiApplyDiff.mock.mockImplementation(async() => kSubmitResult);
+    const overrides: OperationOverrides = { branchName: "custom/branch", reviewers: ["alice"] };
+    getState().setOperationOverrides(overrides);
+
+    await getState().applyDiff(kRepo.fullPath);
+
+    const [, passedOptions] = mockApiApplyDiff.mock.calls[0].arguments;
+    assert.deepEqual(passedOptions.overrides, overrides);
   });
 });
 
@@ -373,6 +433,89 @@ describe("applyAll", () => {
     mockApiApplyDiff.mock.resetCalls();
 
     await getState().applyAll();
+
+    assert.equal(mockApiApplyDiff.mock.callCount(), 0);
+  });
+});
+
+describe("openApplyModal", () => {
+  beforeEach(async() => {
+    await setupRepos([kRepo]);
+    mockApiScanRepos.mock.mockImplementation(async() => [kDiff]);
+    await getState().scanRepos();
+  });
+
+  it("should set applyModalTarget and applyModalRepoPath for single", async() => {
+    await getState().openApplyModal("single", kRepo.fullPath);
+
+    const state = getState();
+    assert.equal(state.applyModalTarget, "single");
+    assert.equal(state.applyModalRepoPath, kRepo.fullPath);
+  });
+
+  it("should set applyModalTarget for all", async() => {
+    await getState().openApplyModal("all");
+
+    assert.equal(getState().applyModalTarget, "all");
+    assert.equal(getState().applyModalRepoPath, null);
+  });
+
+  it("should pre-fill operationOverrides with computed defaults", async() => {
+    await getState().openApplyModal("single", kRepo.fullPath);
+
+    assert.deepEqual(getState().operationOverrides, kDefaults);
+  });
+
+  it("should call getOperationDefaults with selectedOperationId and operationInputs", async() => {
+    getState().setSelectedOperation("my-op");
+    getState().setOperationInputs({ year: 2030 });
+
+    await getState().openApplyModal("all");
+
+    const [passedId, passedInputs] = mockApiGetOperationDefaults.mock.calls[0].arguments as any[];
+    assert.equal(passedId, "my-op");
+    assert.deepEqual(passedInputs, { year: 2030 });
+  });
+});
+
+describe("closeApplyModal", () => {
+  it("should clear applyModalTarget and applyModalRepoPath", async() => {
+    await setupRepos([kRepo]);
+    await getState().openApplyModal("single", kRepo.fullPath);
+    getState().closeApplyModal();
+
+    assert.equal(getState().applyModalTarget, null);
+    assert.equal(getState().applyModalRepoPath, null);
+  });
+});
+
+describe("confirmApply", () => {
+  beforeEach(async() => {
+    await setupRepos([kRepo]);
+    mockApiScanRepos.mock.mockImplementation(async() => [kDiff]);
+    await getState().scanRepos();
+    mockApiApplyDiff.mock.mockImplementation(async() => kSubmitResult);
+  });
+
+  it("should call applyDiff and close modal when target is single", async() => {
+    await getState().openApplyModal("single", kRepo.fullPath);
+    await getState().confirmApply();
+
+    assert.equal(mockApiApplyDiff.mock.callCount(), 1);
+    assert.equal(getState().applyModalTarget, null);
+  });
+
+  it("should call applyAll and close modal when target is all", async() => {
+    await getState().openApplyModal("all");
+    await getState().confirmApply();
+
+    assert.equal(mockApiApplyDiff.mock.callCount(), 1);
+    assert.equal(getState().applyModalTarget, null);
+    assert.equal(getState().step, "results");
+  });
+
+  it("should do nothing when applyModalTarget is null", async() => {
+    await getState().confirmApply();
 
     assert.equal(mockApiApplyDiff.mock.callCount(), 0);
   });

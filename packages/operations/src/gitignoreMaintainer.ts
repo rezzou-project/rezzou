@@ -1,5 +1,5 @@
 // Import Third-party Dependencies
-import type { Operation } from "@rezzou/core";
+import type { Operation, RepoContext } from "@rezzou/core";
 
 // CONSTANTS
 const kRequiredEntries = [
@@ -11,41 +11,51 @@ const kRequiredEntries = [
   "*.log"
 ];
 
-function applyGitignoreMaintainer(content: string): string | null {
-  const existingLines = new Set(
-    content.split("\n").flatMap((line) => {
-      const trimmed = line.trim();
-      if (trimmed.length === 0) {
-        return [];
-      }
-
-      return trimmed;
-    })
-  );
-
-  const missing = kRequiredEntries.filter((entry) => !existingLines.has(entry));
-
-  if (missing.length === 0) {
-    return null;
-  }
-
-  if (content === "") {
-    return missing.join("\n");
-  }
-
-  const separator = content.endsWith("\n") ? "" : "\n";
-
-  return content + separator + missing.join("\n");
-}
-
 export const gitignoreMaintainerOperation = {
+  id: "gitignore-maintainer",
   name: "Gitignore Maintainer",
   description: "Ensure common entries are present in .gitignore without altering existing content",
-  filePath: ".gitignore",
-  branchName: "rezzou/gitignore-maintainer",
-  commitMessage: "chore: update .gitignore",
-  prTitle: "chore: update .gitignore",
-  prDescription: "Automated update of .gitignore to include common entries, performed by Rezzou.",
-  reviewers: [],
-  apply: applyGitignoreMaintainer
+
+  async apply(ctx: RepoContext, _inputs: Record<string, unknown>) {
+    const raw = await ctx.readFile(".gitignore");
+    const content = raw ?? "";
+
+    const existingLines = new Set(
+      content.split("\n").flatMap((line) => {
+        const trimmed = line.trim();
+        if (trimmed.length === 0) {
+          return [];
+        }
+
+        return trimmed;
+      })
+    );
+
+    const missing = kRequiredEntries.filter((entry) => !existingLines.has(entry));
+    if (missing.length === 0) {
+      return null;
+    }
+
+    let updated: string;
+    if (content === "") {
+      updated = missing.join("\n");
+    }
+    else {
+      const separator = content.endsWith("\n") ? "" : "\n";
+      updated = content + separator + missing.join("\n");
+    }
+
+    return [
+      {
+        action: raw === null ? "create" : "update",
+        path: ".gitignore",
+        content: updated
+      }
+    ];
+  },
+
+  branchName: () => "rezzou/gitignore-maintainer",
+  commitMessage: () => "chore: update .gitignore",
+  prTitle: () => "chore: update .gitignore",
+  prDescription: () => "Automated update of .gitignore to include common entries, performed by Rezzou."
 } satisfies Operation;

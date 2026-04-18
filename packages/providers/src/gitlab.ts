@@ -6,6 +6,7 @@ import type { NamespaceType, Namespace, Repo, FileContent, SubmitParams, SubmitR
 import { BaseProvider } from "./base.ts";
 
 export class GitLabAdapter extends BaseProvider {
+  readonly provider = "gitlab" as const;
   #client: InstanceType<typeof Gitlab>;
 
   constructor(token: string) {

@@ -4,7 +4,7 @@ import { describe, it, mock, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 
 // Import Third-party Dependencies
-import type { Repo, RepoDiff, SubmitResult, ProviderAdapter, Namespace, OperationOverrides } from "@rezzou/core";
+import type { Repo, RepoDiff, SubmitResult, ProviderAdapter, OperationOverrides, Namespace } from "@rezzou/core";
 
 // CONSTANTS
 const kCurrentYear = String(new Date().getFullYear());
@@ -18,20 +18,12 @@ const kRepo: Repo = {
 };
 const kDiff: RepoDiff = {
   repo: kRepo,
-  filePath: "LICENSE",
-  original: "Copyright 2020",
-  updated: `Copyright 2020-${kCurrentYear}`
+  patches: [{ action: "update", path: "LICENSE", content: `Copyright 2020-${kCurrentYear}` }],
+  originals: { LICENSE: "Copyright 2020" }
 };
 const kSubmitResult: SubmitResult = {
   prUrl: "https://gitlab.com/ns/my-repo/-/merge_requests/1",
   prTitle: "chore: update license year"
-};
-const kOverrides: OperationOverrides = {
-  branchName: `rezzou/license-year-${kCurrentYear}`,
-  commitMessage: `chore: update license year to ${kCurrentYear}`,
-  prTitle: `chore: update license year to ${kCurrentYear}`,
-  prDescription: "Automated update",
-  reviewers: []
 };
 
 const mockListNamespaces = mock.fn(async() => [] as Namespace[]);
@@ -40,21 +32,21 @@ const mockGetFile = mock.fn(async() => null);
 const mockSubmitChanges = mock.fn(async() => kSubmitResult);
 const mockListMembers = mock.fn(async() => []);
 const kMockOperation = {
+  id: "license-year",
   name: "License Year",
   description: "Update the copyright year in the LICENSE file",
-  filePath: "LICENSE",
-  branchName: `rezzou/license-year-${kCurrentYear}`,
-  commitMessage: `chore: update license year to ${kCurrentYear}`,
-  prTitle: `chore: update license year to ${kCurrentYear}`,
-  prDescription: "Automated update",
-  reviewers: [],
-  apply: (content: string) => content
+  apply: async() => null,
+  branchName: () => `rezzou/license-year-${kCurrentYear}`,
+  commitMessage: () => `chore: update license year to ${kCurrentYear}`,
+  prTitle: () => `chore: update license year to ${kCurrentYear}`,
+  prDescription: () => "Automated update"
 };
 
 mock.module("@rezzou/providers", {
   namedExports: {
     GitLabAdapter: mock.fn(function MockGitLabAdapter() {
       return {
+        provider: "gitlab",
         listNamespaces: mockListNamespaces,
         listRepos: mockListRepos,
         getFile: mockGetFile,
@@ -64,6 +56,7 @@ mock.module("@rezzou/providers", {
     }),
     GitHubAdapter: mock.fn(function MockGitHubAdapter() {
       return {
+        provider: "github",
         listNamespaces: mockListNamespaces,
         listRepos: mockListRepos,
         getFile: mockGetFile,
@@ -74,9 +67,9 @@ mock.module("@rezzou/providers", {
   }
 });
 
-const mockScanRepos = mock.fn(async(_adapter: unknown, _repos: Repo[], _op: unknown): Promise<RepoDiff[]> => []);
+const mockScanRepos = mock.fn(async(_adapter: unknown, _repos: Repo[], _options: unknown): Promise<RepoDiff[]> => []);
 const mockApplyRepoDiff = mock.fn(
-  async(_adapter: unknown, _diff: RepoDiff, _op: unknown): Promise<SubmitResult> => kSubmitResult
+  async(_adapter: unknown, _diff: RepoDiff, _options: unknown): Promise<SubmitResult> => kSubmitResult
 );
 
 mock.module("@rezzou/core", {
@@ -89,34 +82,34 @@ mock.module("@rezzou/core", {
 mock.module("@rezzou/operations", {
   namedExports: {
     licenseYearOperation: {
+      id: "license-year",
       name: "License Year",
       description: "Update the copyright year in the LICENSE file",
-      filePath: "LICENSE",
-      branchName: `rezzou/license-year-${kCurrentYear}`,
-      commitMessage: `chore: update license year to ${kCurrentYear}`,
-      prTitle: `chore: update license year to ${kCurrentYear}`,
-      prDescription: "Automated update",
-      apply: (content: string) => content
+      apply: async() => null,
+      branchName: () => `rezzou/license-year-${kCurrentYear}`,
+      commitMessage: () => `chore: update license year to ${kCurrentYear}`,
+      prTitle: () => `chore: update license year to ${kCurrentYear}`,
+      prDescription: () => "Automated update"
     },
     gitignoreMaintainerOperation: {
+      id: "gitignore-maintainer",
       name: "Gitignore Maintainer",
       description: "Ensure common entries are present in .gitignore without altering existing content",
-      filePath: ".gitignore",
-      branchName: "rezzou/gitignore-maintainer",
-      commitMessage: "chore: update .gitignore",
-      prTitle: "chore: update .gitignore",
-      prDescription: "Automated update",
-      apply: (content: string) => content
+      apply: async() => null,
+      branchName: () => "rezzou/gitignore-maintainer",
+      commitMessage: () => "chore: update .gitignore",
+      prTitle: () => "chore: update .gitignore",
+      prDescription: () => "Automated update"
     },
     editorConfigOperation: {
+      id: "editorconfig",
       name: "EditorConfig",
       description: "Drop a standard .editorconfig if none exists",
-      filePath: ".editorconfig",
-      branchName: "rezzou/editorconfig",
-      commitMessage: "chore: add .editorconfig",
-      prTitle: "chore: add .editorconfig",
-      prDescription: "Automated update",
-      apply: (content: string) => content
+      apply: async() => null,
+      branchName: () => "rezzou/editorconfig",
+      commitMessage: () => "chore: add .editorconfig",
+      prTitle: () => "chore: add .editorconfig",
+      prDescription: () => "Automated update"
     }
   }
 });
@@ -134,6 +127,7 @@ const {
   handleLoadRepos,
   handleScanRepos,
   handleApplyDiff,
+  handleGetOperationDefaults,
   handleGitHubDeviceStart,
   handleGitHubDevicePoll,
   handleGitLabOAuthStart,
@@ -141,6 +135,7 @@ const {
 } = await import("../handlers.ts");
 
 const kMockAdapter: ProviderAdapter = {
+  provider: "gitlab",
   listNamespaces: mockListNamespaces,
   listRepos: mockListRepos,
   getFile: mockGetFile,
@@ -226,7 +221,7 @@ describe("handleScanRepos", () => {
     const diffs: RepoDiff[] = [kDiff];
     mockScanRepos.mock.mockImplementation(async() => diffs);
 
-    const result = await handleScanRepos(kMockAdapter, [kRepo], "license-year");
+    const result = await handleScanRepos(kMockAdapter, [kRepo], { operationId: "license-year", inputs: {} });
 
     assert.equal(mockScanRepos.mock.callCount(), 1);
     assert.deepEqual(result, diffs);
@@ -235,7 +230,7 @@ describe("handleScanRepos", () => {
   it("should pass the provided repos to scanRepos", async() => {
     mockScanRepos.mock.mockImplementation(async() => []);
 
-    await handleScanRepos(kMockAdapter, [kRepo], "license-year");
+    await handleScanRepos(kMockAdapter, [kRepo], { operationId: "license-year", inputs: {} });
 
     const [, repos] = mockScanRepos.mock.calls[0].arguments;
     assert.deepEqual(repos, [kRepo]);
@@ -244,7 +239,7 @@ describe("handleScanRepos", () => {
   it("should resolve the operation from registry using operationId", async() => {
     mockScanRepos.mock.mockImplementation(async() => []);
 
-    await handleScanRepos(kMockAdapter, [kRepo], "gitignore");
+    await handleScanRepos(kMockAdapter, [kRepo], { operationId: "gitignore", inputs: {} });
 
     assert.equal(mockGetOperation.mock.callCount(), 1);
     assert.equal(mockGetOperation.mock.calls[0].arguments[0], "gitignore");
@@ -260,7 +255,7 @@ describe("handleApplyDiff", () => {
   it("should call applyRepoDiff with the given adapter and return the result", async() => {
     mockApplyRepoDiff.mock.mockImplementation(async() => kSubmitResult);
 
-    const result = await handleApplyDiff(kMockAdapter, { diff: kDiff, overrides: kOverrides, operationId: "license-year" });
+    const result = await handleApplyDiff(kMockAdapter, { diff: kDiff, inputs: {}, operationId: "license-year" });
 
     assert.equal(mockApplyRepoDiff.mock.callCount(), 1);
     assert.deepEqual(result, kSubmitResult);
@@ -269,7 +264,7 @@ describe("handleApplyDiff", () => {
   it("should pass the provided diff to applyRepoDiff", async() => {
     mockApplyRepoDiff.mock.mockImplementation(async() => kSubmitResult);
 
-    await handleApplyDiff(kMockAdapter, { diff: kDiff, overrides: kOverrides, operationId: "license-year" });
+    await handleApplyDiff(kMockAdapter, { diff: kDiff, inputs: {}, operationId: "license-year" });
 
     const [, diff] = mockApplyRepoDiff.mock.calls[0].arguments;
     assert.deepEqual(diff, kDiff);
@@ -278,7 +273,39 @@ describe("handleApplyDiff", () => {
   it("should resolve the operation from registry using operationId", async() => {
     mockApplyRepoDiff.mock.mockImplementation(async() => kSubmitResult);
 
-    await handleApplyDiff(kMockAdapter, { diff: kDiff, overrides: kOverrides, operationId: "gitignore" });
+    await handleApplyDiff(kMockAdapter, { diff: kDiff, inputs: {}, operationId: "gitignore" });
+
+    assert.equal(mockGetOperation.mock.callCount(), 1);
+    assert.equal(mockGetOperation.mock.calls[0].arguments[0], "gitignore");
+  });
+
+  it("should pass overrides to applyRepoDiff when provided", async() => {
+    mockApplyRepoDiff.mock.mockImplementation(async() => kSubmitResult);
+    const overrides: OperationOverrides = { branchName: "custom/branch", reviewers: ["alice"] };
+
+    await handleApplyDiff(kMockAdapter, { diff: kDiff, inputs: {}, operationId: "license-year", overrides });
+
+    const passedOptions = mockApplyRepoDiff.mock.calls[0].arguments[2] as Record<string, unknown>;
+    assert.deepEqual(passedOptions.overrides, overrides);
+  });
+});
+
+describe("handleGetOperationDefaults", () => {
+  beforeEach(() => {
+    mockGetOperation.mock.resetCalls();
+  });
+
+  it("should return computed branch, commit, prTitle and prDescription from the operation", () => {
+    const result = handleGetOperationDefaults({ operationId: "license-year", inputs: {} });
+
+    assert.equal(result.branchName, `rezzou/license-year-${kCurrentYear}`);
+    assert.equal(result.commitMessage, `chore: update license year to ${kCurrentYear}`);
+    assert.equal(result.prTitle, `chore: update license year to ${kCurrentYear}`);
+    assert.equal(result.prDescription, "Automated update");
+  });
+
+  it("should resolve the operation from registry using operationId", () => {
+    handleGetOperationDefaults({ operationId: "gitignore", inputs: {} });
 
     assert.equal(mockGetOperation.mock.callCount(), 1);
     assert.equal(mockGetOperation.mock.calls[0].arguments[0], "gitignore");

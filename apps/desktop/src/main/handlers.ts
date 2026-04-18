@@ -12,6 +12,7 @@ import {
   type RepoDiff,
   type SubmitResult,
   type ProviderAdapter,
+  type OperationDefaults,
   type OperationOverrides,
   type Member
 } from "@rezzou/core";
@@ -48,24 +49,59 @@ export async function handleLoadRepos(
   return adapter.listRepos(namespace);
 }
 
-export async function handleScanRepos(adapter: ProviderAdapter, repos: Repo[], operationId: string): Promise<RepoDiff[]> {
-  return scanRepos(adapter, repos, getOperation(operationId));
+export interface HandleScanReposOptions {
+  operationId: string;
+  inputs: Record<string, unknown>;
+}
+
+export async function handleScanRepos(
+  adapter: ProviderAdapter,
+  repos: Repo[],
+  options: HandleScanReposOptions
+): Promise<RepoDiff[]> {
+  const { operationId, inputs } = options;
+
+  return scanRepos(
+    adapter,
+    repos,
+    {
+      operation: getOperation(operationId),
+      inputs
+    }
+  );
 }
 
 export interface ApplyDiffOptions {
   diff: RepoDiff;
-  overrides: OperationOverrides;
+  inputs: Record<string, unknown>;
   operationId: string;
+  overrides?: OperationOverrides;
 }
 
 export async function handleApplyDiff(
   adapter: ProviderAdapter,
   options: ApplyDiffOptions
 ): Promise<SubmitResult> {
-  const { diff, overrides, operationId } = options;
+  const { diff, inputs, operationId, overrides } = options;
+
+  return applyRepoDiff(adapter, diff, { operation: getOperation(operationId), inputs, overrides });
+}
+
+export interface GetOperationDefaultsOptions {
+  operationId: string;
+  inputs: Record<string, unknown>;
+}
+
+export function handleGetOperationDefaults(options: GetOperationDefaultsOptions): OperationDefaults {
+  const { operationId, inputs } = options;
   const operation = getOperation(operationId);
 
-  return applyRepoDiff(adapter, diff, { ...operation, ...overrides });
+  return {
+    branchName: operation.branchName(inputs),
+    commitMessage: operation.commitMessage(inputs),
+    prTitle: operation.prTitle(inputs),
+    prDescription: operation.prDescription(inputs)
+  };
 }
 
 export async function handleFetchMembers(

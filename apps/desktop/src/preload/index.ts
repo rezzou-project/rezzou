@@ -1,6 +1,15 @@
 // Import Third-party Dependencies
 import { contextBridge, ipcRenderer } from "electron";
-import type { Repo, RepoDiff, SubmitResult, Provider, Namespace, OperationOverrides, Member } from "@rezzou/core";
+import type {
+  Repo,
+  RepoDiff,
+  SubmitResult,
+  Provider,
+  Namespace,
+  Member,
+  OperationDefaults,
+  OperationOverrides
+} from "@rezzou/core";
 
 contextBridge.exposeInMainWorld("versions", {
   electron: process.versions.electron,
@@ -17,16 +26,21 @@ contextBridge.exposeInMainWorld("api", {
 
   scanRepos: (
     repos: Repo[],
-    operationId: string
-  ): Promise<RepoDiff[]> => ipcRenderer.invoke("engine:scanRepos", { repos, operationId }),
+    operationId: string,
+    inputs: Record<string, unknown>
+  ): Promise<RepoDiff[]> => ipcRenderer.invoke("engine:scanRepos", { repos, operationId, inputs }),
 
   applyDiff: (
     diff: RepoDiff,
-    overrides: OperationOverrides,
-    operationId: string
-  ): Promise<SubmitResult> => ipcRenderer.invoke("engine:applyDiff", { diff, overrides, operationId }),
+    options: { inputs: Record<string, unknown>; operationId: string; overrides?: OperationOverrides; }
+  ): Promise<SubmitResult> => ipcRenderer.invoke("engine:applyDiff", { diff, ...options }),
 
   listOperations: () => ipcRenderer.invoke("engine:listOperations"),
+
+  getOperationDefaults: (
+    operationId: string,
+    inputs: Record<string, unknown>
+  ): Promise<OperationDefaults> => ipcRenderer.invoke("engine:getOperationDefaults", { operationId, inputs }),
 
   fetchMembers: (namespace: string): Promise<Member[]> => ipcRenderer.invoke("engine:fetchMembers", namespace),
 

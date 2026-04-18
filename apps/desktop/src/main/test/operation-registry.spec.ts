@@ -20,16 +20,16 @@ describe("OPERATION_REGISTRY", () => {
 });
 
 describe("getOperation", () => {
-  it("should return license-year operation with filePath LICENSE", () => {
-    assert.equal(getOperation("license-year").filePath, "LICENSE");
+  it("should return license-year operation with id 'license-year'", () => {
+    assert.equal(getOperation("license-year").id, "license-year");
   });
 
-  it("should return gitignore-maintainer operation with filePath .gitignore", () => {
-    assert.equal(getOperation("gitignore-maintainer").filePath, ".gitignore");
+  it("should return gitignore-maintainer operation with id 'gitignore-maintainer'", () => {
+    assert.equal(getOperation("gitignore-maintainer").id, "gitignore-maintainer");
   });
 
-  it("should return editorconfig operation with filePath .editorconfig", () => {
-    assert.equal(getOperation("editorconfig").filePath, ".editorconfig");
+  it("should return editorconfig operation with id 'editorconfig'", () => {
+    assert.equal(getOperation("editorconfig").id, "editorconfig");
   });
 
   it("should throw for an unknown id", () => {
@@ -47,16 +47,14 @@ describe("listOperations", () => {
     assert.equal(ops.length, OPERATION_REGISTRY.size);
   });
 
-  it("should include id, name, description, and filePath for each entry", () => {
+  it("should include id, name, and description for each entry", () => {
     const ops = listOperations();
     const licenseYear = ops.find((op) => op.id === "license-year");
 
     assert.ok(licenseYear !== undefined);
     assert.equal(typeof licenseYear.name, "string");
     assert.equal(typeof licenseYear.description, "string");
-    assert.equal(typeof licenseYear.filePath, "string");
     assert.ok(licenseYear.name.length > 0);
     assert.ok(licenseYear.description.length > 0);
-    assert.ok(licenseYear.filePath.length > 0);
   });
 });

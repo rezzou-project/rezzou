@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 
 // Import Internal Dependencies
 import { scanRepos, applyRepoDiff } from "../engine.ts";
-import type { Repo, Operation, RepoDiff, SubmitResult, SubmitParams } from "../types.ts";
+import type { Repo, Operation, OperationOverrides, RepoDiff, SubmitResult, SubmitParams, RepoContext } from "../types.ts";
 
 // CONSTANTS
 const kRepo: Repo = {
@@ -17,15 +17,21 @@ const kRepo: Repo = {
 };
 
 const kOperation: Operation = {
-  filePath: "LICENSE",
-  branchName: "rezzou/test",
-  commitMessage: "chore: test",
-  prTitle: "chore: test",
-  prDescription: "test description",
-  reviewers: [],
-  apply(content: string) {
-    return `${content} updated`;
-  }
+  id: "test-op",
+  name: "Test Operation",
+  description: "A test operation",
+  async apply(ctx: RepoContext) {
+    const content = await ctx.readFile("test.txt");
+    if (content === null) {
+      return null;
+    }
+
+    return [{ action: "update", path: "test.txt", content: `${content} updated` }];
+  },
+  branchName: () => "rezzou/test",
+  commitMessage: () => "chore: test",
+  prTitle: () => "chore: test",
+  prDescription: () => "test description"
 };
 
 const kSubmitResult: SubmitResult = {
@@ -33,80 +39,55 @@ const kSubmitResult: SubmitResult = {
   prTitle: "chore: test"
 };
 
+type GetFileImpl = (repoPath: string, filePath: string, branch: string) => Promise<{ content: string; ref: string; } | null>;
+
+function makeAdapter(getFileImpl?: GetFileImpl) {
+  return {
+    provider: "gitlab" as const,
+    listNamespaces: async() => [],
+    listRepos: async() => [],
+    getFile: getFileImpl ?? (async() => null),
+    submitChanges: async() => kSubmitResult,
+    listMembers: async() => []
+  };
+}
+
 describe("UT scanRepos", () => {
   it("should return empty array when repos list is empty", async() => {
-    const adapter = {
-      listNamespaces: async() => [],
-      listRepos: async() => [],
-      getFile: async() => null,
-      submitChanges: async() => kSubmitResult,
-      listMembers: async() => []
-    };
-
-    const result = await scanRepos(adapter, [], kOperation);
+    const result = await scanRepos(makeAdapter(), [], { operation: kOperation, inputs: {} });
 
     assert.deepEqual(result, []);
   });
 
   it("should skip repo when getFile returns null", async() => {
-    const adapter = {
-      listNamespaces: async() => [],
-      listRepos: async() => [],
-      getFile: async() => null,
-      submitChanges: async() => kSubmitResult,
-      listMembers: async() => []
-    };
-
-    const result = await scanRepos(adapter, [kRepo], kOperation);
+    const result = await scanRepos(makeAdapter(), [kRepo], { operation: kOperation, inputs: {} });
 
     assert.deepEqual(result, []);
   });
 
   it("should skip repo when apply returns null", async() => {
-    const adapter = {
-      listNamespaces: async() => [],
-      listRepos: async() => [],
-      getFile: async() => {
-        return { content: "already up to date", ref: "main" };
-      },
-      submitChanges: async() => kSubmitResult,
-      listMembers: async() => []
-    };
-
     const operation: Operation = {
       ...kOperation,
-      apply: () => null
+      apply: async() => null
     };
 
-    const result = await scanRepos(adapter, [kRepo], operation);
+    const result = await scanRepos(makeAdapter(), [kRepo], { operation, inputs: {} });
 
     assert.deepEqual(result, []);
   });
 
   it("should return diff when file exists and apply succeeds", async() => {
     const original = "MIT License\nCopyright 2020";
-    const updated = "MIT License\nCopyright 2020 updated";
+    const adapter = makeAdapter(async() => {
+      return { content: original, ref: "main" };
+    });
 
-    const adapter = {
-      listNamespaces: async() => [],
-      listRepos: async() => [],
-      getFile: async() => {
-        return { content: original, ref: "main" };
-      },
-      submitChanges: async() => kSubmitResult,
-      listMembers: async() => []
-    };
+    const result = await scanRepos(adapter, [kRepo], { operation: kOperation, inputs: {} });
 
-    const result = await scanRepos(adapter, [kRepo], kOperation);
-
-    assert.deepEqual(result, [
-      {
-        repo: kRepo,
-        filePath: kOperation.filePath,
-        original,
-        updated
-      }
-    ]);
+    assert.equal(result.length, 1);
+    assert.deepEqual(result[0].repo, kRepo);
+    assert.deepEqual(result[0].patches, [{ action: "update", path: "test.txt", content: `${original} updated` }]);
+    assert.deepEqual(result[0].originals, { "test.txt": original });
   });
 
   it("should return only diffs for repos with changes", async() => {
@@ -114,83 +95,102 @@ describe("UT scanRepos", () => {
     const repoB: Repo = { ...kRepo, id: "2", name: "repo-b", fullPath: "ns/repo-b" };
     const repoC: Repo = { ...kRepo, id: "3", name: "repo-c", fullPath: "ns/repo-c" };
 
-    const adapter = {
-      listNamespaces: async() => [],
-      listRepos: async() => [],
-      async getFile(repoPath: string) {
-        if (repoPath === "ns/repo-b") {
-          return null;
-        }
+    const adapter = makeAdapter(async(repoPath) => {
+      if (repoPath === "ns/repo-b") {
+        return null;
+      }
 
-        return { content: "original content", ref: "main" };
-      },
-      submitChanges: async() => kSubmitResult,
-      listMembers: async() => []
-    };
+      return { content: "original content", ref: "main" };
+    });
 
-    const result = await scanRepos(adapter, [repoA, repoB, repoC], kOperation);
+    const result = await scanRepos(adapter, [repoA, repoB, repoC], { operation: kOperation, inputs: {} });
 
     assert.equal(result.length, 2);
     assert.equal(result[0].repo.fullPath, "ns/repo-a");
     assert.equal(result[1].repo.fullPath, "ns/repo-c");
   });
 
-  it("should call getFile with repo fullPath, operation filePath, and defaultBranch", async() => {
+  it("should call getFile with repo fullPath, operation file path, and defaultBranch", async() => {
     let capturedArgs: [string, string, string] | undefined;
 
-    const adapter = {
-      listNamespaces: async() => [],
-      listRepos: async() => [],
-      async getFile(repoPath: string, filePath: string, branch: string) {
-        capturedArgs = [repoPath, filePath, branch];
+    const adapter = makeAdapter(async(repoPath, filePath, branch) => {
+      capturedArgs = [repoPath, filePath, branch];
 
-        return null;
-      },
-      submitChanges: async() => kSubmitResult,
-      listMembers: async() => []
-    };
+      return null;
+    });
 
-    await scanRepos(adapter, [kRepo], kOperation);
+    await scanRepos(adapter, [kRepo], { operation: kOperation, inputs: {} });
 
-    assert.deepEqual(capturedArgs, [kRepo.fullPath, kOperation.filePath, kRepo.defaultBranch]);
+    assert.deepEqual(capturedArgs, [kRepo.fullPath, "test.txt", kRepo.defaultBranch]);
   });
 });
 
 describe("UT applyRepoDiff", () => {
-  it("should call submitChanges with correct params and return result", async() => {
-    const diff: RepoDiff = {
-      repo: kRepo,
-      filePath: "LICENSE",
-      original: "MIT License\nCopyright 2020",
-      updated: "MIT License\nCopyright 2020-2026"
-    };
+  const kDiff: RepoDiff = {
+    repo: kRepo,
+    patches: [{ action: "update", path: "LICENSE", content: "MIT License\nCopyright 2020-2026" }],
+    originals: { LICENSE: "MIT License\nCopyright 2020" }
+  };
 
+  function makeSubmitAdapter() {
     let capturedParams: SubmitParams | undefined;
-
     const adapter = {
-      listNamespaces: async() => [],
-      listRepos: async() => [],
-      getFile: async() => null,
-      async submitChanges(params: SubmitParams) {
+      ...makeAdapter(),
+      submitChanges: async(params: SubmitParams) => {
         capturedParams = params;
 
         return kSubmitResult;
-      },
-      listMembers: async() => []
+      }
     };
 
-    const result = await applyRepoDiff(adapter, diff, kOperation);
+    return { adapter, getCaptured: () => capturedParams };
+  }
 
-    assert.deepEqual(capturedParams, {
+  it("should call submitChanges with correct params and return result", async() => {
+    const { adapter, getCaptured } = makeSubmitAdapter();
+
+    const result = await applyRepoDiff(adapter, kDiff, { operation: kOperation, inputs: {} });
+
+    assert.deepEqual(getCaptured(), {
       repoPath: kRepo.fullPath,
       baseBranch: kRepo.defaultBranch,
-      headBranch: kOperation.branchName,
-      commitMessage: kOperation.commitMessage,
-      prTitle: kOperation.prTitle,
-      prDescription: kOperation.prDescription,
+      headBranch: "rezzou/test",
+      commitMessage: "chore: test",
+      prTitle: "chore: test",
+      prDescription: "test description",
       reviewers: [],
-      files: [{ action: "update", path: diff.filePath, content: diff.updated }]
+      files: [{ action: "update", path: "LICENSE", content: "MIT License\nCopyright 2020-2026" }]
     });
     assert.deepEqual(result, kSubmitResult);
+  });
+
+  it("should use overrides instead of operation-computed values when provided", async() => {
+    const overrides: OperationOverrides = {
+      branchName: "custom/branch",
+      commitMessage: "custom: commit message",
+      prTitle: "Custom PR Title",
+      prDescription: "Custom PR description",
+      reviewers: ["alice", "bob"]
+    };
+    const { adapter, getCaptured } = makeSubmitAdapter();
+
+    await applyRepoDiff(adapter, kDiff, { operation: kOperation, inputs: {}, overrides });
+
+    assert.equal(getCaptured()?.headBranch, "custom/branch");
+    assert.equal(getCaptured()?.commitMessage, "custom: commit message");
+    assert.equal(getCaptured()?.prTitle, "Custom PR Title");
+    assert.equal(getCaptured()?.prDescription, "Custom PR description");
+    assert.deepEqual(getCaptured()?.reviewers, ["alice", "bob"]);
+  });
+
+  it("should fall back to operation-computed values for unset override fields", async() => {
+    const overrides: OperationOverrides = { branchName: "custom/branch" };
+    const { adapter, getCaptured } = makeSubmitAdapter();
+
+    await applyRepoDiff(adapter, kDiff, { operation: kOperation, inputs: {}, overrides });
+
+    assert.equal(getCaptured()?.headBranch, "custom/branch");
+    assert.equal(getCaptured()?.commitMessage, "chore: test");
+    assert.deepEqual(getCaptured()?.reviewers, []);
   });
 });
