@@ -2,34 +2,108 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
+// Import Third-party Dependencies
+import type { Operation } from "@rezzou/core";
+
 // Import Internal Dependencies
-import { OPERATION_REGISTRY, getOperation, listOperations } from "../operation-registry.ts";
+import { registry, getOperation, listOperations } from "../operation-registry.ts";
 
-describe("OPERATION_REGISTRY", () => {
-  it("should contain the license-year operation", () => {
-    assert.ok(OPERATION_REGISTRY.has("license-year"));
+// CONSTANTS
+const kFakeOperation = {
+  id: "fake-op",
+  name: "Fake Op",
+  description: "A fake operation for testing",
+  apply: async() => null,
+  branchName: () => "fake-branch",
+  commitMessage: () => "fake commit",
+  prTitle: () => "fake PR",
+  prDescription: () => "fake description"
+} satisfies Operation;
+
+describe("registry.register", () => {
+  it("should add the operation to the registry", () => {
+    registry.register(kFakeOperation);
+
+    assert.equal(registry.get("fake-op").id, "fake-op");
+    registry.unregister("fake-op");
   });
 
-  it("should contain the gitignore-maintainer operation", () => {
-    assert.ok(OPERATION_REGISTRY.has("gitignore-maintainer"));
+  it("should emit a change event", (t) => {
+    const onChange = t.mock.fn();
+    registry.once("change", onChange);
+
+    registry.register(kFakeOperation);
+    assert.equal(onChange.mock.callCount(), 1);
+
+    registry.unregister("fake-op");
+  });
+});
+
+describe("registry.unregister", () => {
+  it("should remove the operation from the registry", () => {
+    registry.register(kFakeOperation);
+    registry.unregister("fake-op");
+
+    assert.throws(
+      () => registry.get("fake-op"),
+      { message: "Unknown operation: \"fake-op\"" }
+    );
   });
 
-  it("should contain the editorconfig operation", () => {
-    assert.ok(OPERATION_REGISTRY.has("editorconfig"));
+  it("should emit a change event", (t) => {
+    registry.register(kFakeOperation);
+    const onChange = t.mock.fn();
+    registry.once("change", onChange);
+
+    registry.unregister("fake-op");
+    assert.equal(onChange.mock.callCount(), 1);
+  });
+});
+
+describe("registry.list", () => {
+  it("should return id, name, and description for each operation", () => {
+    const ops = registry.list();
+
+    assert.ok(ops.length > 0);
+    for (const op of ops) {
+      assert.equal(typeof op.id, "string");
+      assert.equal(typeof op.name, "string");
+      assert.equal(typeof op.description, "string");
+    }
+  });
+
+  it("should include registered operations", () => {
+    registry.register(kFakeOperation);
+
+    const ops = registry.list();
+    assert.ok(ops.some((op) => op.id === "fake-op"));
+
+    registry.unregister("fake-op");
+  });
+});
+
+describe("registry.get", () => {
+  it("should return the operation by id", () => {
+    assert.equal(registry.get("license-year").id, "license-year");
+  });
+
+  it("should throw for an unknown id", () => {
+    assert.throws(
+      () => registry.get("unknown-op"),
+      { message: "Unknown operation: \"unknown-op\"" }
+    );
+  });
+});
+
+describe("listOperations", () => {
+  it("should return the same entries as registry.list()", () => {
+    assert.deepEqual(listOperations(), registry.list());
   });
 });
 
 describe("getOperation", () => {
-  it("should return license-year operation with id 'license-year'", () => {
+  it("should return the operation by id", () => {
     assert.equal(getOperation("license-year").id, "license-year");
-  });
-
-  it("should return gitignore-maintainer operation with id 'gitignore-maintainer'", () => {
-    assert.equal(getOperation("gitignore-maintainer").id, "gitignore-maintainer");
-  });
-
-  it("should return editorconfig operation with id 'editorconfig'", () => {
-    assert.equal(getOperation("editorconfig").id, "editorconfig");
   });
 
   it("should throw for an unknown id", () => {
@@ -37,24 +111,5 @@ describe("getOperation", () => {
       () => getOperation("unknown-op"),
       { message: "Unknown operation: \"unknown-op\"" }
     );
-  });
-});
-
-describe("listOperations", () => {
-  it("should return an entry for each registered operation", () => {
-    const ops = listOperations();
-
-    assert.equal(ops.length, OPERATION_REGISTRY.size);
-  });
-
-  it("should include id, name, and description for each entry", () => {
-    const ops = listOperations();
-    const licenseYear = ops.find((op) => op.id === "license-year");
-
-    assert.ok(licenseYear !== undefined);
-    assert.equal(typeof licenseYear.name, "string");
-    assert.equal(typeof licenseYear.description, "string");
-    assert.ok(licenseYear.name.length > 0);
-    assert.ok(licenseYear.description.length > 0);
   });
 });

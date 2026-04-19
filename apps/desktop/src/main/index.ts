@@ -21,7 +21,7 @@ import {
   type ApplyDiffOptions,
   type GetOperationDefaultsOptions
 } from "./handlers.ts";
-import { listOperations, type OperationInfo } from "./operation-registry.ts";
+import { listOperations, registry, type OperationInfo } from "./operation-registry.ts";
 
 interface AuthenticateOptions {
   token: string;
@@ -269,6 +269,10 @@ app.whenReady().then(() => {
   });
 
   createWindow();
+
+  registry.on("change", function onRegistryChange() {
+    mainWindow?.webContents.send("registry:operationsChanged", registry.list());
+  });
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
