@@ -21,6 +21,7 @@ export type { Plugin, PluginContributions } from "./types.ts";
 export { defineOperation } from "./defineOperation.ts";
 export { defineFilter } from "./defineFilter.ts";
 export { definePlugin } from "./definePlugin.ts";
+export { pluginSchema, parsePlugin } from "./pluginSchema.ts";
 export * as json from "./helpers/json.ts";
 export * as yaml from "./helpers/yaml.ts";
 export * as lines from "./helpers/lines.ts";

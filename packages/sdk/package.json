@@ -18,7 +18,9 @@
     "test": "node --strip-types --test src/test/**/*.spec.ts",
     "prepublishOnly": "npm run build"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "publishConfig": {
     "access": "public",
     "provenance": true,
@@ -31,7 +33,7 @@
   },
   "dependencies": {
     "@rezzou/core": "*",
-    "yaml": "^2.8.0"
-  },
-  "peerDependencies": {}
+    "yaml": "^2.8.0",
+    "zod": "^4.3.6"
+  }
 }
