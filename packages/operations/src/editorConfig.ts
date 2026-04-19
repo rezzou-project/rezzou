@@ -17,6 +17,7 @@ export const editorConfigOperation = {
   id: "editorconfig",
   name: "EditorConfig",
   description: "Drop a standard .editorconfig if none exists",
+  inputs: [],
 
   async apply(ctx: RepoContext, _inputs: Record<string, unknown>) {
     const content = await ctx.readFile(".editorconfig");

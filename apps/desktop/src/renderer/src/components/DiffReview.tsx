@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 // Import Internal Dependencies
 import { useAppStore } from "../stores/app.js";
 import type { RepoDiff } from "../stores/app.js";
-import type { Member } from "@rezzou/core";
+import type { Member, Patch } from "@rezzou/core";
 
 // CONSTANTS
 const kContextLines = 2;
@@ -58,20 +58,57 @@ function filterDiffContext(lines: DiffLine[]): DiffLine[] {
   return lines.slice(start, end + 1);
 }
 
+interface FileDiffProps {
+  patch: Patch;
+  original: string;
+}
+
+function FileDiff({ patch, original }: FileDiffProps) {
+  const [open, setOpen] = useState(true);
+  const source = patch.action !== "create" ? original : "";
+  const lineDiff = filterDiffContext(computeLineDiff(source, patch.content ?? ""));
+
+  return (
+    <div>
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center gap-2 px-4 py-2 text-left hover:bg-gray-800"
+      >
+        <span className="select-none text-gray-500">{open ? "▾" : "▸"}</span>
+        <span className="font-mono text-xs text-gray-300">{patch.path}</span>
+      </button>
+      {open && (
+        <pre className="overflow-x-auto px-4 pb-4 font-mono text-xs leading-5">
+          {lineDiff.map((line, lineIndex) => (
+            <div
+              key={lineIndex}
+              className={
+                line.type === "removed"
+                  ? "bg-red-950 text-red-300"
+                  : line.type === "added"
+                    ? "bg-green-950 text-green-300"
+                    : "text-gray-400"
+              }
+            >
+              <span className="mr-3 select-none text-gray-600">
+                {line.type === "removed" ? "-" : line.type === "added" ? "+" : " "}
+              </span>
+              {line.content}
+            </div>
+          ))}
+        </pre>
+      )}
+    </div>
+  );
+}
+
 function DiffCard({ diff }: { diff: RepoDiff; }) {
   const { openApplyModal } = useAppStore();
-  const patch = diff.patches[0];
-  const original = patch.action !== "create" ? (diff.originals[patch.path] ?? "") : "";
-  const updated = patch.content ?? "";
-  const lineDiff = filterDiffContext(computeLineDiff(original, updated));
 
   return (
     <div className="rounded-lg border border-gray-800 bg-gray-900">
       <div className="flex items-center justify-between border-b border-gray-800 px-4 py-3">
-        <div>
-          <span className="text-sm font-medium">{diff.repo.name}</span>
-          <span className="ml-2 text-xs text-gray-500">{patch.path}</span>
-        </div>
+        <span className="text-sm font-medium">{diff.repo.name}</span>
 
         {diff.applyStatus === "pending" && (
           <button
@@ -102,25 +139,15 @@ function DiffCard({ diff }: { diff: RepoDiff; }) {
         )}
       </div>
 
-      <pre className="overflow-x-auto p-4 font-mono text-xs leading-5">
-        {lineDiff.map((line, lineIndex) => (
-          <div
-            key={lineIndex}
-            className={
-              line.type === "removed"
-                ? "bg-red-950 text-red-300"
-                : line.type === "added"
-                  ? "bg-green-950 text-green-300"
-                  : "text-gray-400"
-            }
-          >
-            <span className="mr-3 select-none text-gray-600">
-              {line.type === "removed" ? "-" : line.type === "added" ? "+" : " "}
-            </span>
-            {line.content}
-          </div>
+      <div className="divide-y divide-gray-800">
+        {diff.patches.map((patch) => (
+          <FileDiff
+            key={patch.path}
+            patch={patch}
+            original={diff.originals[patch.path] ?? ""}
+          />
         ))}
-      </pre>
+      </div>
     </div>
   );
 }
