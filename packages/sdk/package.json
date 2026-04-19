@@ -30,7 +30,8 @@
     "directory": "packages/sdk"
   },
   "dependencies": {
-    "@rezzou/core": "*"
+    "@rezzou/core": "*",
+    "yaml": "^2.8.0"
   },
   "peerDependencies": {}
 }

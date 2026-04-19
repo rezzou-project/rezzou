@@ -16,7 +16,8 @@ export type {
   Operation,
   OperationDefaults,
   OperationOverrides,
-  RepoDiff
+  RepoDiff,
+  RepoFilter
 } from "./types.ts";
 export { scanRepos, applyRepoDiff } from "./engine.ts";
 export { ApiRepoContext } from "./context.ts";
