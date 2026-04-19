@@ -30,6 +30,9 @@ const mockGetBranch = mock.fn(async() => {
 });
 
 const mockCreateRef = mock.fn(async() => void 0);
+const mockGetTree = mock.fn(async() => {
+  return { data: { tree: [] as unknown[] } };
+});
 const mockRequest = mock.fn(async() => void 0);
 
 const mockPullsCreate = mock.fn(async() => {
@@ -55,7 +58,8 @@ mock.module("@octokit/rest", {
           getBranch: mockGetBranch
         },
         git: {
-          createRef: mockCreateRef
+          createRef: mockCreateRef,
+          getTree: mockGetTree
         },
         request: mockRequest,
         pulls: {
@@ -110,6 +114,7 @@ describe("GitHubAdapter", () => {
     mockGetContent.mock.resetCalls();
     mockGetBranch.mock.resetCalls();
     mockCreateRef.mock.resetCalls();
+    mockGetTree.mock.resetCalls();
     mockRequest.mock.resetCalls();
     mockPullsCreate.mock.resetCalls();
     mockRequestReviewers.mock.resetCalls();
@@ -493,6 +498,54 @@ describe("GitHubAdapter", () => {
 
       assert.deepEqual(result, []);
       assert.equal(mockListOrgMembers.mock.callCount(), 0);
+    });
+  });
+
+  describe("listTree", () => {
+    it("should return only blob paths from the tree", async() => {
+      mockGetTree.mock.mockImplementation(async() => {
+        return {
+          data: {
+            tree: [
+              { type: "tree", path: "src" },
+              { type: "blob", path: "src/index.ts" },
+              { type: "blob", path: "README.md" },
+              { type: "tree", path: "src/utils" },
+              { type: "blob", path: "src/utils/helper.ts" }
+            ]
+          }
+        };
+      });
+
+      const adapter = new GitHubAdapter(kToken);
+      const result = await adapter.listTree("owner/repo", "main");
+
+      assert.deepEqual(result, ["src/index.ts", "README.md", "src/utils/helper.ts"]);
+    });
+
+    it("should return empty array when repository is empty", async() => {
+      mockGetTree.mock.mockImplementation(async() => {
+        return { data: { tree: [] } };
+      });
+
+      const adapter = new GitHubAdapter(kToken);
+      const result = await adapter.listTree("owner/repo", "main");
+
+      assert.deepEqual(result, []);
+    });
+
+    it("should call getTree with owner, repo, branch and recursive flag", async() => {
+      mockGetTree.mock.mockImplementation(async() => {
+        return { data: { tree: [] } };
+      });
+
+      const adapter = new GitHubAdapter(kToken);
+      await adapter.listTree("owner/my-repo", "develop");
+
+      assert.equal(mockGetTree.mock.callCount(), 1);
+      assert.deepEqual(mockGetTree.mock.calls[0].arguments, [
+        { owner: "owner", repo: "my-repo", tree_sha: "develop", recursive: "1" }
+      ]);
     });
   });
 });

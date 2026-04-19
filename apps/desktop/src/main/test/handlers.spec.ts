@@ -31,6 +31,7 @@ const mockListRepos = mock.fn(async() => [] as Repo[]);
 const mockGetFile = mock.fn(async() => null);
 const mockSubmitChanges = mock.fn(async() => kSubmitResult);
 const mockListMembers = mock.fn(async() => []);
+const mockListTree = mock.fn(async() => [] as string[]);
 const kMockOperation = {
   id: "license-year",
   name: "License Year",
@@ -50,6 +51,7 @@ mock.module("@rezzou/providers", {
         listNamespaces: mockListNamespaces,
         listRepos: mockListRepos,
         getFile: mockGetFile,
+        listTree: mockListTree,
         submitChanges: mockSubmitChanges,
         listMembers: mockListMembers
       };
@@ -60,6 +62,7 @@ mock.module("@rezzou/providers", {
         listNamespaces: mockListNamespaces,
         listRepos: mockListRepos,
         getFile: mockGetFile,
+        listTree: mockListTree,
         submitChanges: mockSubmitChanges,
         listMembers: mockListMembers
       };
@@ -139,6 +142,7 @@ const kMockAdapter: ProviderAdapter = {
   listNamespaces: mockListNamespaces,
   listRepos: mockListRepos,
   getFile: mockGetFile,
+  listTree: mockListTree,
   submitChanges: mockSubmitChanges,
   listMembers: mockListMembers
 };

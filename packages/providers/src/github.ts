@@ -178,6 +178,24 @@ export class GitHubAdapter extends BaseProvider {
     };
   }
 
+  async listTree(repoPath: string, branch: string): Promise<string[]> {
+    const [owner, repo] = repoPath.split("/");
+    const { data } = await this.#client.git.getTree({
+      owner,
+      repo,
+      tree_sha: branch,
+      recursive: "1"
+    });
+
+    return data.tree.flatMap((item) => {
+      if (item.type !== "blob") {
+        return [];
+      }
+
+      return item.path;
+    });
+  }
+
   async listMembers(namespace: string): Promise<Member[]> {
     const namespaceType = this.#namespaces.get(namespace) ?? "org";
 

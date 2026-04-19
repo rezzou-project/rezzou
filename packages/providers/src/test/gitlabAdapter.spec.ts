@@ -21,6 +21,7 @@ const mockShowCurrentUser = mock.fn(async() => {
 });
 const mockGroupMembersAll = mock.fn(async() => ([] as unknown[]));
 const mockGroupsAll = mock.fn(async() => ([] as unknown[]));
+const mockAllRepositoryTrees = mock.fn(async() => ([] as unknown[]));
 
 mock.module("@gitbeaker/rest", {
   namedExports: {
@@ -28,6 +29,7 @@ mock.module("@gitbeaker/rest", {
       return {
         Groups: { allProjects: mockAllProjects, all: mockGroupsAll },
         RepositoryFiles: { show: mockShow },
+        Repositories: { allRepositoryTrees: mockAllRepositoryTrees },
         Commits: { create: mockCommitsCreate },
         MergeRequests: { create: mockMrCreate },
         Users: { all: mockUsersAll, showCurrentUser: mockShowCurrentUser },
@@ -49,6 +51,7 @@ describe("GitLabAdapter", () => {
     mockShowCurrentUser.mock.resetCalls();
     mockGroupMembersAll.mock.resetCalls();
     mockGroupsAll.mock.resetCalls();
+    mockAllRepositoryTrees.mock.resetCalls();
   });
 
   describe("listNamespaces", () => {
@@ -360,6 +363,45 @@ describe("GitLabAdapter", () => {
 
       assert.equal(mockGroupMembersAll.mock.callCount(), 1);
       assert.deepEqual(mockGroupMembersAll.mock.calls[0].arguments, ["my-group"]);
+    });
+  });
+
+  describe("listTree", () => {
+    it("should return only blob paths from the tree", async() => {
+      mockAllRepositoryTrees.mock.mockImplementation(async() => [
+        { type: "tree", path: "src" },
+        { type: "blob", path: "src/index.ts" },
+        { type: "blob", path: "README.md" },
+        { type: "tree", path: "src/utils" },
+        { type: "blob", path: "src/utils/helper.ts" }
+      ]);
+
+      const adapter = new GitLabAdapter(kToken);
+      const result = await adapter.listTree("ns/repo", "main");
+
+      assert.deepEqual(result, ["src/index.ts", "README.md", "src/utils/helper.ts"]);
+    });
+
+    it("should return empty array when repository is empty", async() => {
+      mockAllRepositoryTrees.mock.mockImplementation(async() => []);
+
+      const adapter = new GitLabAdapter(kToken);
+      const result = await adapter.listTree("ns/repo", "main");
+
+      assert.deepEqual(result, []);
+    });
+
+    it("should call allRepositoryTrees with repoPath, branch, recursive and pagination", async() => {
+      mockAllRepositoryTrees.mock.mockImplementation(async() => []);
+
+      const adapter = new GitLabAdapter(kToken);
+      await adapter.listTree("ns/my-repo", "develop");
+
+      assert.equal(mockAllRepositoryTrees.mock.callCount(), 1);
+      assert.deepEqual(mockAllRepositoryTrees.mock.calls[0].arguments, [
+        "ns/my-repo",
+        { ref: "develop", recursive: true, perPage: 100 }
+      ]);
     });
   });
 });

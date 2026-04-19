@@ -47,6 +47,7 @@ function makeAdapter(getFileImpl?: GetFileImpl) {
     listNamespaces: async() => [],
     listRepos: async() => [],
     getFile: getFileImpl ?? (async() => null),
+    listTree: async() => [],
     submitChanges: async() => kSubmitResult,
     listMembers: async() => []
   };

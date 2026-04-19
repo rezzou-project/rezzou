@@ -1,41 +1,6 @@
 // Import Internal Dependencies
-import type {
-  ProviderAdapter, Operation, OperationOverrides, Repo, RepoDiff, SubmitResult, RepoContext, Provider
-} from "./types.ts";
-
-class ApiRepoContext implements RepoContext {
-  readonly repo: Repo;
-  readonly provider: Provider;
-
-  #adapter: ProviderAdapter;
-  #cache: Map<string, string | null> = new Map();
-
-  constructor(adapter: ProviderAdapter, repo: Repo) {
-    this.#adapter = adapter;
-    this.repo = repo;
-    this.provider = adapter.provider;
-  }
-
-  async readFile(path: string): Promise<string | null> {
-    if (this.#cache.has(path)) {
-      return this.#cache.get(path)!;
-    }
-
-    const result = await this.#adapter.getFile(this.repo.fullPath, path, this.repo.defaultBranch);
-    const content = result?.content ?? null;
-    this.#cache.set(path, content);
-
-    return content;
-  }
-
-  async listFiles(_glob: string): Promise<string[]> {
-    throw new Error("listFiles requires listTree provider support");
-  }
-
-  async exists(path: string): Promise<boolean> {
-    return await this.readFile(path) !== null;
-  }
-}
+import type { ProviderAdapter, Operation, OperationOverrides, Repo, RepoDiff, SubmitResult } from "./types.ts";
+import { ApiRepoContext } from "./context.ts";
 
 export async function scanRepos<I extends Record<string, unknown>>(
   adapter: ProviderAdapter,
