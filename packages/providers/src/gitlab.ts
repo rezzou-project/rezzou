@@ -124,6 +124,22 @@ export class GitLabAdapter extends BaseProvider {
     };
   }
 
+  async listTree(repoPath: string, branch: string): Promise<string[]> {
+    const items = await this.#client.Repositories.allRepositoryTrees(repoPath, {
+      ref: branch,
+      recursive: true,
+      perPage: 100
+    });
+
+    return items.flatMap((item) => {
+      if (item.type !== "blob") {
+        return [];
+      }
+
+      return item.path;
+    });
+  }
+
   async listMembers(namespace: string): Promise<Member[]> {
     const members = await this.#client.GroupMembers.all(namespace);
 

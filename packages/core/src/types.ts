@@ -113,6 +113,7 @@ export interface ProviderAdapter {
   listNamespaces(): Promise<Namespace[]>;
   listRepos(namespace: string): Promise<Repo[]>;
   getFile(repoPath: string, filePath: string, branch: string): Promise<FileContent | null>;
+  listTree(repoPath: string, branch: string): Promise<string[]>;
   submitChanges(params: SubmitParams): Promise<SubmitResult>;
   listMembers(namespace: string): Promise<Member[]>;
 }

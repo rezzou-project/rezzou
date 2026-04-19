@@ -19,3 +19,4 @@ export type {
   RepoDiff
 } from "./types.ts";
 export { scanRepos, applyRepoDiff } from "./engine.ts";
+export { ApiRepoContext } from "./context.ts";
