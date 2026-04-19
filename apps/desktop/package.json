@@ -15,6 +15,7 @@
     "@rezzou/core": "*",
     "@rezzou/operations": "*",
     "@rezzou/providers": "*",
+    "@rezzou/sdk": "*",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "zustand": "^5.0.12"
