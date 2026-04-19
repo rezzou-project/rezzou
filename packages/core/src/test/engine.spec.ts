@@ -124,6 +124,47 @@ describe("UT scanRepos", () => {
 
     assert.deepEqual(capturedArgs, [kRepo.fullPath, "test.txt", kRepo.defaultBranch]);
   });
+
+  it("should return multi-file diff with all originals when apply returns multiple patches", async() => {
+    const fileContents: Record<string, string> = {
+      LICENSE: "MIT License\nCopyright 2020",
+      "README.md": "# My Repo"
+    };
+
+    const multiFileOperation: Operation = {
+      ...kOperation,
+      async apply(ctx: RepoContext) {
+        const license = await ctx.readFile("LICENSE");
+        const readme = await ctx.readFile("README.md");
+        if (license === null || readme === null) {
+          return null;
+        }
+
+        return [
+          { action: "update", path: "LICENSE", content: `${license} updated` },
+          { action: "update", path: "README.md", content: `${readme} updated` }
+        ];
+      }
+    };
+
+    const adapter = makeAdapter(async(_repoPath, filePath) => {
+      const content = fileContents[filePath];
+
+      return content ? { content, ref: "main" } : null;
+    });
+
+    const result = await scanRepos(adapter, [kRepo], { operation: multiFileOperation, inputs: {} });
+
+    assert.equal(result.length, 1);
+    assert.deepEqual(result[0].patches, [
+      { action: "update", path: "LICENSE", content: "MIT License\nCopyright 2020 updated" },
+      { action: "update", path: "README.md", content: "# My Repo updated" }
+    ]);
+    assert.deepEqual(result[0].originals, {
+      LICENSE: "MIT License\nCopyright 2020",
+      "README.md": "# My Repo"
+    });
+  });
 });
 
 describe("UT applyRepoDiff", () => {
@@ -193,5 +234,27 @@ describe("UT applyRepoDiff", () => {
     assert.equal(getCaptured()?.headBranch, "custom/branch");
     assert.equal(getCaptured()?.commitMessage, "chore: test");
     assert.deepEqual(getCaptured()?.reviewers, []);
+  });
+
+  it("should map multiple patches to CommitAction files", async() => {
+    const multiFileDiff: RepoDiff = {
+      repo: kRepo,
+      patches: [
+        { action: "update", path: "LICENSE", content: "MIT License\nCopyright 2020-2026" },
+        { action: "update", path: "README.md", content: "# My Repo\nNew content" }
+      ],
+      originals: {
+        LICENSE: "MIT License\nCopyright 2020",
+        "README.md": "# My Repo\nOld content"
+      }
+    };
+    const { adapter, getCaptured } = makeSubmitAdapter();
+
+    await applyRepoDiff(adapter, multiFileDiff, { operation: kOperation, inputs: {} });
+
+    assert.deepEqual(getCaptured()?.files, [
+      { action: "update", path: "LICENSE", content: "MIT License\nCopyright 2020-2026" },
+      { action: "update", path: "README.md", content: "# My Repo\nNew content" }
+    ]);
   });
 });

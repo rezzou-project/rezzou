@@ -15,6 +15,7 @@ export const gitignoreMaintainerOperation = {
   id: "gitignore-maintainer",
   name: "Gitignore Maintainer",
   description: "Ensure common entries are present in .gitignore without altering existing content",
+  inputs: [],
 
   async apply(ctx: RepoContext, _inputs: Record<string, unknown>) {
     const raw = await ctx.readFile(".gitignore");
