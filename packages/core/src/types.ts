@@ -123,3 +123,10 @@ export interface RepoDiff {
   patches: Patch[];
   originals: Record<string, string>;
 }
+
+export interface RepoFilter {
+  readonly id: string;
+  readonly name: string;
+  readonly description?: string;
+  test(ctx: RepoContext): Promise<boolean>;
+}
