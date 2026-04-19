@@ -11,6 +11,12 @@ import type {
   OperationOverrides
 } from "@rezzou/core";
 
+interface PluginInfo {
+  id: string;
+  name: string;
+  version: string;
+}
+
 contextBridge.exposeInMainWorld("versions", {
   electron: process.versions.electron,
   node: process.versions.node
@@ -84,5 +90,7 @@ contextBridge.exposeInMainWorld("api", {
     ipcRenderer.on("registry:operationsChanged", listener);
 
     return () => ipcRenderer.removeListener("registry:operationsChanged", listener);
-  }
+  },
+
+  loadPlugin: (filePath: string): Promise<PluginInfo> => ipcRenderer.invoke("plugin:load", { filePath })
 });

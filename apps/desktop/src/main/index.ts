@@ -22,6 +22,7 @@ import {
   type GetOperationDefaultsOptions
 } from "./handlers.ts";
 import { listOperations, registry, type OperationInfo } from "./operation-registry.ts";
+import { loadPlugin } from "./plugin-loader.ts";
 
 interface AuthenticateOptions {
   token: string;
@@ -32,6 +33,16 @@ interface ScanReposPayload {
   repos: Repo[];
   operationId: string;
   inputs: Record<string, unknown>;
+}
+
+interface LoadPluginPayload {
+  filePath: string;
+}
+
+interface PluginInfo {
+  id: string;
+  name: string;
+  version: string;
 }
 
 // CONSTANTS
@@ -253,6 +264,13 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle("engine:listOperations", (): OperationInfo[] => listOperations());
+
+  ipcMain.handle("plugin:load", async(_event, payload: LoadPluginPayload): Promise<PluginInfo> => {
+    const { filePath } = payload;
+    const plugin = await loadPlugin(filePath).catch(toError);
+
+    return { id: plugin.id, name: plugin.name, version: plugin.version };
+  });
 
   ipcMain.handle("engine:getOperationDefaults", (_event, payload: GetOperationDefaultsOptions) => {
     const { operationId, inputs } = payload;
