@@ -16,6 +16,8 @@ export function OperationPicker() {
 
   useEffect(() => {
     void window.api.listOperations().then(setOperations);
+
+    return window.api.onOperationsChanged(setOperations);
   }, []);
 
   return (

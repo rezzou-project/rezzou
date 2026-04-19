@@ -16,6 +16,7 @@ declare global {
       cancelOAuth(): Promise<void>;
       onOAuthAuthenticated(callback: (namespaces: Namespace[], provider: Provider) => void): () => void;
       onOAuthError(callback: (message: string) => void): () => void;
+      onOperationsChanged(callback: (ops: { id: string; name: string; description: string; }[]) => void): () => void;
     };
   }
 }

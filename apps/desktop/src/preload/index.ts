@@ -73,5 +73,16 @@ contextBridge.exposeInMainWorld("api", {
     ipcRenderer.on("oauth:error", listener);
 
     return () => ipcRenderer.removeListener("oauth:error", listener);
+  },
+
+  onOperationsChanged: (
+    callback: (ops: { id: string; name: string; description: string; }[]) => void
+  ): (() => void) => {
+    function listener(_event: unknown, ops: { id: string; name: string; description: string; }[]) {
+      callback(ops);
+    }
+    ipcRenderer.on("registry:operationsChanged", listener);
+
+    return () => ipcRenderer.removeListener("registry:operationsChanged", listener);
   }
 });
