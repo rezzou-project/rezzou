@@ -94,5 +94,7 @@ contextBridge.exposeInMainWorld("api", {
 
   loadPlugin: (filePath: string): Promise<PluginInfo> => ipcRenderer.invoke("plugin:load", { filePath }),
 
-  pickAndLoadPlugin: (): Promise<PluginInfo | null> => ipcRenderer.invoke("plugin:pick-and-load")
+  pickAndLoadPlugin: (): Promise<PluginInfo | null> => ipcRenderer.invoke("plugin:pick-and-load"),
+
+  getMissingPlugins: (): Promise<string[]> => ipcRenderer.invoke("plugin:getMissing")
 });
