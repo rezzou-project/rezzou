@@ -3,20 +3,35 @@ import * as path from "node:path";
 import * as fs from "node:fs";
 import * as os from "node:os";
 
-const kDir = path.join(os.homedir(), ".rezzou");
-const kFile = path.join(kDir, "plugins.json");
+const kRezzouDir = path.join(os.homedir(), ".rezzou");
+const kPluginsFile = path.join(kRezzouDir, "plugins.json");
+const kPluginsDir = path.join(kRezzouDir, "plugins");
 
 export function readPluginPaths(): string[] {
-  if (!fs.existsSync(kFile)) {
+  if (!fs.existsSync(kPluginsFile)) {
     return [];
   }
 
   try {
-    return JSON.parse(fs.readFileSync(kFile, "utf-8")) as string[];
+    return JSON.parse(fs.readFileSync(kPluginsFile, "utf-8")) as string[];
   }
   catch {
     return [];
   }
+}
+
+export function scanPluginsDir(): string[] {
+  if (!fs.existsSync(kPluginsDir)) {
+    return [];
+  }
+
+  return fs.readdirSync(kPluginsDir).flatMap((name) => {
+    if (/\.(js|mjs|ts)$/.test(name) === false) {
+      return [];
+    }
+
+    return path.join(kPluginsDir, name);
+  });
 }
 
 export function addPluginPath(filePath: string): void {
@@ -25,6 +40,6 @@ export function addPluginPath(filePath: string): void {
     return;
   }
   paths.push(filePath);
-  fs.mkdirSync(kDir, { recursive: true });
-  fs.writeFileSync(kFile, JSON.stringify(paths, null, 2));
+  fs.mkdirSync(kRezzouDir, { recursive: true });
+  fs.writeFileSync(kPluginsFile, JSON.stringify(paths, null, 2));
 }
