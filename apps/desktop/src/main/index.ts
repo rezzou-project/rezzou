@@ -23,7 +23,7 @@ import {
 } from "./handlers.ts";
 import { listOperations, registry, type OperationInfo } from "./operation-registry.ts";
 import { loadPlugin } from "./plugin-loader.ts";
-import { readPluginPaths, addPluginPath } from "./plugins-store.ts";
+import { readPluginPaths, addPluginPath, scanPluginsDir } from "./plugins-store.ts";
 
 interface AuthenticateOptions {
   token: string;
@@ -305,7 +305,9 @@ app.whenReady().then(async() => {
     return handleFetchMembers(currentAdapter, namespace).catch(toError);
   });
 
-  for (const filePath of readPluginPaths()) {
+  const persistedPaths = readPluginPaths();
+
+  for (const filePath of persistedPaths) {
     if (!fs.existsSync(filePath)) {
       missingPluginPaths.push(filePath);
       continue;
@@ -315,6 +317,18 @@ app.whenReady().then(async() => {
     }
     catch {
       missingPluginPaths.push(filePath);
+    }
+  }
+
+  for (const filePath of scanPluginsDir()) {
+    if (persistedPaths.includes(filePath)) {
+      continue;
+    }
+    try {
+      await loadPlugin(filePath);
+    }
+    catch {
+      // silently skip unloadable auto-scanned plugins
     }
   }
 
