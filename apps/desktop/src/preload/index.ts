@@ -17,6 +17,14 @@ interface PluginInfo {
   version: string;
 }
 
+interface LoadedPluginInfo {
+  id: string;
+  name: string;
+  version: string;
+  filePath: string;
+  source: "persisted" | "auto-scanned";
+}
+
 contextBridge.exposeInMainWorld("versions", {
   electron: process.versions.electron,
   node: process.versions.node
@@ -96,5 +104,22 @@ contextBridge.exposeInMainWorld("api", {
 
   pickAndLoadPlugin: (): Promise<PluginInfo | null> => ipcRenderer.invoke("plugin:pick-and-load"),
 
-  getMissingPlugins: (): Promise<string[]> => ipcRenderer.invoke("plugin:getMissing")
+  getMissingPlugins: (): Promise<string[]> => ipcRenderer.invoke("plugin:getMissing"),
+
+  listPlugins: (): Promise<LoadedPluginInfo[]> => ipcRenderer.invoke("plugin:list"),
+
+  unloadPlugin: (filePath: string): Promise<void> => ipcRenderer.invoke("plugin:unload", { filePath }),
+
+  reloadPlugin: (filePath: string): Promise<PluginInfo> => ipcRenderer.invoke("plugin:reload", { filePath }),
+
+  onPluginsChanged: (
+    callback: (plugins: LoadedPluginInfo[]) => void
+  ): (() => void) => {
+    function listener(_event: unknown, plugins: LoadedPluginInfo[]) {
+      callback(plugins);
+    }
+    ipcRenderer.on("registry:pluginsChanged", listener);
+
+    return () => ipcRenderer.removeListener("registry:pluginsChanged", listener);
+  }
 });

@@ -43,3 +43,9 @@ export function addPluginPath(filePath: string): void {
   fs.mkdirSync(kRezzouDir, { recursive: true });
   fs.writeFileSync(kPluginsFile, JSON.stringify(paths, null, 2));
 }
+
+export function removePluginPath(filePath: string): void {
+  const paths = readPluginPaths().filter((p) => p !== filePath);
+  fs.mkdirSync(kRezzouDir, { recursive: true });
+  fs.writeFileSync(kPluginsFile, JSON.stringify(paths, null, 2));
+}

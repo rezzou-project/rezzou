@@ -2,7 +2,7 @@
 import { create } from "zustand";
 import type { Provider, Namespace, Repo, RepoDiff as BaseRepoDiff, SubmitResult, OperationOverrides } from "@rezzou/core";
 
-type Step = "connect" | "home" | "repos" | "pick-operation" | "diffs" | "results";
+type Step = "connect" | "home" | "repos" | "pick-operation" | "diffs" | "results" | "plugins";
 
 function ipcErrorMessage(error: unknown, fallback: string): string {
   if (!(error instanceof Error)) {
@@ -49,6 +49,7 @@ interface AppActions {
   authenticate: (token: string, provider: Provider) => Promise<void>;
   receiveOAuthResult: (namespaces: Namespace[], provider: Provider) => void;
   goHome: () => void;
+  goToPlugins: () => void;
   loadRepos: (namespace: Namespace) => Promise<void>;
   toggleRepo: (id: string) => void;
   selectAll: () => void;
@@ -118,6 +119,10 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
 
     goHome: () => {
       set({ step: "home", selectedNamespace: null, repos: [], selectedRepoIds: [], diffs: [] });
+    },
+
+    goToPlugins: () => {
+      set({ step: "plugins" });
     },
 
     loadRepos: async(namespace: Namespace) => {

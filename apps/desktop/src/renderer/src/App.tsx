@@ -10,6 +10,7 @@ import { RepoList } from "./components/RepoList.js";
 import { OperationPicker } from "./components/OperationPicker.js";
 import { DiffReview } from "./components/DiffReview.js";
 import { ResultPanel } from "./components/ResultPanel.js";
+import { PluginsSettings } from "./components/PluginsSettings.js";
 
 export function App() {
   const step = useAppStore((state) => state.step);
@@ -43,6 +44,7 @@ export function App() {
           {step === "pick-operation" && <OperationPicker />}
           {step === "diffs" && <DiffReview />}
           {step === "results" && <ResultPanel />}
+          {step === "plugins" && <PluginsSettings />}
         </main>
       </div>
     </div>

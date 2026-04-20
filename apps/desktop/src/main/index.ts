@@ -22,8 +22,8 @@ import {
   type GetOperationDefaultsOptions
 } from "./handlers.ts";
 import { listOperations, registry, type OperationInfo } from "./operation-registry.ts";
-import { loadPlugin } from "./plugin-loader.ts";
-import { readPluginPaths, addPluginPath, scanPluginsDir } from "./plugins-store.ts";
+import { loadPlugin, unregisterPluginByPath } from "./plugin-loader.ts";
+import { readPluginPaths, addPluginPath, removePluginPath, scanPluginsDir } from "./plugins-store.ts";
 
 interface AuthenticateOptions {
   token: string;
@@ -46,6 +46,22 @@ interface PluginInfo {
   version: string;
 }
 
+interface LoadedPluginInfo {
+  id: string;
+  name: string;
+  version: string;
+  filePath: string;
+  source: "persisted" | "auto-scanned";
+}
+
+interface UnloadPluginPayload {
+  filePath: string;
+}
+
+interface ReloadPluginPayload {
+  filePath: string;
+}
+
 // CONSTANTS
 const kCredentialsFile = "credentials.json";
 const kGitHubClientId = import.meta.env.MAIN_VITE_GITHUB_CLIENT_ID as string;
@@ -55,6 +71,8 @@ let currentAdapter: ProviderAdapter | null = null;
 let mainWindow: BrowserWindow | null = null;
 let pendingGitLabVerifier: string | null = null;
 let githubDeviceAbortController: AbortController | null = null;
+
+const loadedPlugins = new Map<string, LoadedPluginInfo>();
 
 function getCredentialsPath(): string {
   return path.join(app.getPath("userData"), kCredentialsFile);
@@ -271,6 +289,14 @@ app.whenReady().then(async() => {
   ipcMain.handle("plugin:load", async(_event, payload: LoadPluginPayload): Promise<PluginInfo> => {
     const { filePath } = payload;
     const plugin = await loadPlugin(filePath).catch(toError);
+    loadedPlugins.set(filePath, {
+      id: plugin.id,
+      name: plugin.name,
+      version: plugin.version,
+      filePath,
+      source: "persisted"
+    });
+    mainWindow?.webContents.send("registry:pluginsChanged", [...loadedPlugins.values()]);
 
     return { id: plugin.id, name: plugin.name, version: plugin.version };
   });
@@ -283,13 +309,50 @@ app.whenReady().then(async() => {
     if (canceled || filePaths.length === 0) {
       return null;
     }
-    const plugin = await loadPlugin(filePaths[0]).catch(toError);
-    addPluginPath(filePaths[0]);
+    const filePath = filePaths[0];
+    const plugin = await loadPlugin(filePath).catch(toError);
+    addPluginPath(filePath);
+    loadedPlugins.set(filePath, {
+      id: plugin.id,
+      name: plugin.name,
+      version: plugin.version,
+      filePath,
+      source: "persisted"
+    });
+    mainWindow?.webContents.send("registry:pluginsChanged", [...loadedPlugins.values()]);
 
     return { id: plugin.id, name: plugin.name, version: plugin.version };
   });
 
   ipcMain.handle("plugin:getMissing", (): string[] => missingPluginPaths);
+
+  ipcMain.handle("plugin:list", (): LoadedPluginInfo[] => [...loadedPlugins.values()]);
+
+  ipcMain.handle("plugin:unload", async(_event, payload: UnloadPluginPayload): Promise<void> => {
+    const { filePath } = payload;
+    unregisterPluginByPath(filePath);
+    removePluginPath(filePath);
+    loadedPlugins.delete(filePath);
+    mainWindow?.webContents.send("registry:pluginsChanged", [...loadedPlugins.values()]);
+  });
+
+  ipcMain.handle("plugin:reload", async(_event, payload: ReloadPluginPayload): Promise<PluginInfo> => {
+    const { filePath } = payload;
+    unregisterPluginByPath(filePath);
+    const plugin = await loadPlugin(filePath).catch(toError);
+    const existing = loadedPlugins.get(filePath);
+    const info: LoadedPluginInfo = {
+      id: plugin.id,
+      name: plugin.name,
+      version: plugin.version,
+      filePath,
+      source: existing?.source ?? "persisted"
+    };
+    loadedPlugins.set(filePath, info);
+    mainWindow?.webContents.send("registry:pluginsChanged", [...loadedPlugins.values()]);
+
+    return { id: plugin.id, name: plugin.name, version: plugin.version };
+  });
 
   ipcMain.handle("engine:getOperationDefaults", (_event, payload: GetOperationDefaultsOptions) => {
     const { operationId, inputs } = payload;
@@ -313,7 +376,14 @@ app.whenReady().then(async() => {
       continue;
     }
     try {
-      await loadPlugin(filePath);
+      const plugin = await loadPlugin(filePath);
+      loadedPlugins.set(filePath, {
+        id: plugin.id,
+        name: plugin.name,
+        version: plugin.version,
+        filePath,
+        source: "persisted"
+      });
     }
     catch {
       missingPluginPaths.push(filePath);
@@ -325,7 +395,14 @@ app.whenReady().then(async() => {
       continue;
     }
     try {
-      await loadPlugin(filePath);
+      const plugin = await loadPlugin(filePath);
+      loadedPlugins.set(filePath, {
+        id: plugin.id,
+        name: plugin.name,
+        version: plugin.version,
+        filePath,
+        source: "auto-scanned"
+      });
     }
     catch {
       // silently skip unloadable auto-scanned plugins
