@@ -1,12 +1,12 @@
 // Import Third-party Dependencies
-import { defineConfig, externalizeDepsPlugin } from "electron-vite";
+import { defineConfig } from "electron-vite";
 import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   main: {
     envDir: "../../",
-    plugins: [externalizeDepsPlugin()],
     build: {
+      externalizeDeps: true,
       rollupOptions: {
         input: {
           index: `${import.meta.dirname}/src/main/index.ts`,
@@ -19,8 +19,8 @@ export default defineConfig({
     }
   },
   preload: {
-    plugins: [externalizeDepsPlugin()],
     build: {
+      externalizeDeps: true,
       rollupOptions: {
         output: {
           format: "cjs",
