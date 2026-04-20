@@ -3,10 +3,10 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 // Import Third-party Dependencies
-import type { RepoContext, Repo } from "@rezzou/core";
+import type { RepoContext, Repo } from "@rezzou/sdk";
 
 // Import Internal Dependencies
-import { gitignoreMaintainerOperation } from "../gitignoreMaintainer.ts";
+import { gitignoreMaintainerOperation } from "../gitignore-maintainer/gitignoreMaintainer.ts";
 
 // CONSTANTS
 const kRepo: Repo = {

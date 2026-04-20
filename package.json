@@ -9,10 +9,10 @@
     "packages/*"
   ],
   "scripts": {
-    "build:packages": "npm run build -w packages/core -w packages/providers -w packages/operations -w packages/sdk",
+    "build:packages": "npm run build -w packages/core -w packages/providers -w packages/sdk -w packages/plugins",
     "dev": "npm run build:packages && npm run dev --workspace=apps/desktop",
     "build": "npm run build:packages && npm run build --workspace=apps/desktop",
-    "test": "npm test -w packages/core -w packages/providers -w packages/operations -w packages/sdk -w apps/desktop",
+    "test": "npm test -w packages/core -w packages/providers -w packages/sdk -w packages/plugins -w apps/desktop",
     "lint": "eslint apps/*/src packages/*/src",
     "ci:publish": "changeset publish",
     "ci:version": "changeset version",

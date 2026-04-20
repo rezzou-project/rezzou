@@ -1,5 +1,4 @@
 ---
-"@rezzou/operations": patch
 "@rezzou/providers": patch
 "@rezzou/core": patch
 ---

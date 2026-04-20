@@ -2,8 +2,11 @@
 import * as events from "node:events";
 
 // Import Third-party Dependencies
-import { licenseYearOperation, gitignoreMaintainerOperation, editorConfigOperation } from "@rezzou/operations";
+import { licenseYearPlugin, gitignoreMaintainerPlugin, editorConfigPlugin } from "@rezzou/plugins";
 import type { Operation } from "@rezzou/core";
+
+const kBuiltinOperations = [licenseYearPlugin, gitignoreMaintainerPlugin, editorConfigPlugin]
+  .flatMap((plugin) => plugin.operations);
 
 export interface OperationInfo {
   id: string;
@@ -12,11 +15,9 @@ export interface OperationInfo {
 }
 
 class OperationRegistry extends events.EventEmitter {
-  #operations = new Map<string, Operation>([
-    [licenseYearOperation.id, licenseYearOperation],
-    [gitignoreMaintainerOperation.id, gitignoreMaintainerOperation],
-    [editorConfigOperation.id, editorConfigOperation]
-  ]);
+  #operations = new Map<string, Operation>(
+    kBuiltinOperations.map((op) => [op.id, op])
+  );
 
   register(operation: Operation): void {
     this.#operations.set(operation.id, operation);

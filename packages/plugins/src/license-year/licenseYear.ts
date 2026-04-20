@@ -1,5 +1,5 @@
 // Import Third-party Dependencies
-import type { Operation, RepoContext } from "@rezzou/core";
+import { defineOperation, type RepoContext } from "@rezzou/sdk";
 
 // CONSTANTS
 const kCurrentYear = String(new Date().getFullYear());
@@ -11,7 +11,7 @@ interface LicenseYearInputs extends Record<string, unknown> {
   year?: number;
 }
 
-export const licenseYearOperation = {
+export const licenseYearOperation = defineOperation<LicenseYearInputs>({
   id: "license-year",
   name: "License Year",
   description: "Update the copyright year in the LICENSE file",
@@ -57,4 +57,4 @@ export const licenseYearOperation = {
   commitMessage: (inputs: LicenseYearInputs) => `chore: update license year to ${inputs.year ?? kCurrentYear}`,
   prTitle: (inputs: LicenseYearInputs) => `chore: update license year to ${inputs.year ?? kCurrentYear}`,
   prDescription: (inputs: LicenseYearInputs) => `Automated update of copyright year to ${inputs.year ?? kCurrentYear}, performed by Rezzou.` // eslint-disable-line @stylistic/max-len
-} satisfies Operation<LicenseYearInputs>;
+});

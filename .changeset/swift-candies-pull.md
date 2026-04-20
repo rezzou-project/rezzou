@@ -1,5 +1,4 @@
 ---
-"@rezzou/operations": minor
 "@rezzou/providers": minor
 "@rezzou/core": minor
 ---

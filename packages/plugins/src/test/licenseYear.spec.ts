@@ -3,10 +3,10 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 // Import Third-party Dependencies
-import type { RepoContext, Repo } from "@rezzou/core";
+import type { RepoContext, Repo } from "@rezzou/sdk";
 
 // Import Internal Dependencies
-import { licenseYearOperation, CURRENT_YEAR } from "../licenseYear.ts";
+import { licenseYearOperation, CURRENT_YEAR } from "../license-year/licenseYear.ts";
 
 // CONSTANTS
 const kRepo: Repo = {

@@ -3,8 +3,8 @@
   "references": [
     { "path": "packages/core" },
     { "path": "packages/providers" },
-    { "path": "packages/operations" },
     { "path": "packages/sdk" },
+    { "path": "packages/plugins" },
     { "path": "apps/desktop" }
   ]
 }
