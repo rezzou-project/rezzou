@@ -42,13 +42,42 @@ interface SerializedPlugin {
   filters: Array<{ id: string; name: string; description?: string; }>;
 }
 
-function registerPlugin(plugin: Plugin): void {
+interface LoadedPluginEntry {
+  operationIds: string[];
+  filterIds: string[];
+}
+
+const loadedPlugins = new Map<string, LoadedPluginEntry>();
+
+function registerPlugin(plugin: Plugin, filePath: string): void {
+  const operationIds: string[] = [];
+  const filterIds: string[] = [];
+
   for (const operation of plugin.operations) {
     operationRegistry.register(operation);
+    operationIds.push(operation.id);
   }
   for (const filter of plugin.filters ?? []) {
     filterRegistry.register(filter);
+    filterIds.push(filter.id);
   }
+
+  loadedPlugins.set(filePath, { operationIds, filterIds });
+}
+
+export function unregisterPluginByPath(filePath: string): void {
+  const entry = loadedPlugins.get(filePath);
+  if (!entry) {
+    return;
+  }
+
+  for (const id of entry.operationIds) {
+    operationRegistry.unregister(id);
+  }
+  for (const id of entry.filterIds) {
+    filterRegistry.unregister(id);
+  }
+  loadedPlugins.delete(filePath);
 }
 
 async function loadJsPlugin(filePath: string): Promise<Plugin> {
@@ -64,7 +93,7 @@ async function loadJsPlugin(filePath: string): Promise<Plugin> {
 
   const raw: unknown = (mod as Record<string, unknown>).default ?? mod;
   const plugin = parsePlugin(raw);
-  registerPlugin(plugin);
+  registerPlugin(plugin, filePath);
 
   return plugin;
 }
@@ -227,7 +256,7 @@ async function loadTsPlugin(filePath: string): Promise<Plugin> {
     filters: filters.length > 0 ? filters : undefined
   };
 
-  registerPlugin(plugin);
+  registerPlugin(plugin, filePath);
 
   return plugin;
 }

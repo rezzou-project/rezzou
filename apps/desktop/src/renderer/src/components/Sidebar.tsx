@@ -7,7 +7,9 @@ export function Sidebar() {
   const selectedNamespace = useAppStore((state) => state.selectedNamespace);
   const repoCounts = useAppStore((state) => state.repoCounts);
   const isLoading = useAppStore((state) => state.isLoading);
+  const step = useAppStore((state) => state.step);
   const goHome = useAppStore((state) => state.goHome);
+  const goToPlugins = useAppStore((state) => state.goToPlugins);
   const loadRepos = useAppStore((state) => state.loadRepos);
 
   return (
@@ -47,6 +49,20 @@ export function Sidebar() {
           );
         })}
       </nav>
+
+      <div className="border-t border-gray-800 p-2">
+        <button
+          type="button"
+          onClick={goToPlugins}
+          className={`flex w-full items-center gap-2 rounded px-3 py-2 text-sm transition-colors ${
+            step === "plugins"
+              ? "bg-gray-800 text-white"
+              : "text-gray-400 hover:bg-gray-800 hover:text-gray-200"
+          }`}
+        >
+          Plugins
+        </button>
+      </div>
     </aside>
   );
 }

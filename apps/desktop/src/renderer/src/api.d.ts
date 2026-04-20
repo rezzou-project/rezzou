@@ -1,5 +1,13 @@
 import type { Repo, RepoDiff, SubmitResult, Provider, Namespace, Member, OperationDefaults, OperationOverrides } from "@rezzou/core";
 
+interface LoadedPluginInfo {
+  id: string;
+  name: string;
+  version: string;
+  filePath: string;
+  source: "persisted" | "auto-scanned";
+}
+
 declare global {
   interface Window {
     api: {
@@ -20,6 +28,10 @@ declare global {
       loadPlugin(filePath: string): Promise<{ id: string; name: string; version: string; }>;
       pickAndLoadPlugin(): Promise<{ id: string; name: string; version: string; } | null>;
       getMissingPlugins(): Promise<string[]>;
+      listPlugins(): Promise<LoadedPluginInfo[]>;
+      unloadPlugin(filePath: string): Promise<void>;
+      reloadPlugin(filePath: string): Promise<{ id: string; name: string; version: string; }>;
+      onPluginsChanged(callback: (plugins: LoadedPluginInfo[]) => void): () => void;
     };
   }
 }
