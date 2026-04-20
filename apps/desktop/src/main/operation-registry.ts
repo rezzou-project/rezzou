@@ -2,10 +2,10 @@
 import * as events from "node:events";
 
 // Import Third-party Dependencies
-import { licenseYearPlugin, gitignoreMaintainerPlugin, editorConfigPlugin } from "@rezzou/plugins";
+import { licenseYearPlugin, gitignoreMaintainerPlugin, editorConfigPlugin, addFilePlugin } from "@rezzou/plugins";
 import type { Operation } from "@rezzou/core";
 
-const kBuiltinOperations = [licenseYearPlugin, gitignoreMaintainerPlugin, editorConfigPlugin]
+const kBuiltinOperations = [licenseYearPlugin, gitignoreMaintainerPlugin, editorConfigPlugin, addFilePlugin]
   .flatMap((plugin) => plugin.operations);
 
 export interface OperationInfo {
