@@ -82,37 +82,52 @@ mock.module("@rezzou/core", {
   }
 });
 
-mock.module("@rezzou/operations", {
+mock.module("@rezzou/plugins", {
   namedExports: {
-    licenseYearOperation: {
+    licenseYearPlugin: {
       id: "license-year",
       name: "License Year",
-      description: "Update the copyright year in the LICENSE file",
-      apply: async() => null,
-      branchName: () => `rezzou/license-year-${kCurrentYear}`,
-      commitMessage: () => `chore: update license year to ${kCurrentYear}`,
-      prTitle: () => `chore: update license year to ${kCurrentYear}`,
-      prDescription: () => "Automated update"
+      version: "0.1.0",
+      operations: [{
+        id: "license-year",
+        name: "License Year",
+        description: "Update the copyright year in the LICENSE file",
+        apply: async() => null,
+        branchName: () => `rezzou/license-year-${kCurrentYear}`,
+        commitMessage: () => `chore: update license year to ${kCurrentYear}`,
+        prTitle: () => `chore: update license year to ${kCurrentYear}`,
+        prDescription: () => "Automated update"
+      }]
     },
-    gitignoreMaintainerOperation: {
+    gitignoreMaintainerPlugin: {
       id: "gitignore-maintainer",
       name: "Gitignore Maintainer",
-      description: "Ensure common entries are present in .gitignore without altering existing content",
-      apply: async() => null,
-      branchName: () => "rezzou/gitignore-maintainer",
-      commitMessage: () => "chore: update .gitignore",
-      prTitle: () => "chore: update .gitignore",
-      prDescription: () => "Automated update"
+      version: "0.1.0",
+      operations: [{
+        id: "gitignore-maintainer",
+        name: "Gitignore Maintainer",
+        description: "Ensure common entries are present in .gitignore without altering existing content",
+        apply: async() => null,
+        branchName: () => "rezzou/gitignore-maintainer",
+        commitMessage: () => "chore: update .gitignore",
+        prTitle: () => "chore: update .gitignore",
+        prDescription: () => "Automated update"
+      }]
     },
-    editorConfigOperation: {
-      id: "editorconfig",
+    editorConfigPlugin: {
+      id: "editor-config",
       name: "EditorConfig",
-      description: "Drop a standard .editorconfig if none exists",
-      apply: async() => null,
-      branchName: () => "rezzou/editorconfig",
-      commitMessage: () => "chore: add .editorconfig",
-      prTitle: () => "chore: add .editorconfig",
-      prDescription: () => "Automated update"
+      version: "0.1.0",
+      operations: [{
+        id: "editorconfig",
+        name: "EditorConfig",
+        description: "Drop a standard .editorconfig if none exists",
+        apply: async() => null,
+        branchName: () => "rezzou/editorconfig",
+        commitMessage: () => "chore: add .editorconfig",
+        prTitle: () => "chore: add .editorconfig",
+        prDescription: () => "Automated update"
+      }]
     }
   }
 });

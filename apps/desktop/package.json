@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@rezzou/core": "*",
-    "@rezzou/operations": "*",
+    "@rezzou/plugins": "*",
     "@rezzou/providers": "*",
     "@rezzou/sdk": "*",
     "react": "^19.2.5",

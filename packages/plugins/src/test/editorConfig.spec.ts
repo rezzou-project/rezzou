@@ -3,10 +3,10 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 // Import Third-party Dependencies
-import type { RepoContext, Repo } from "@rezzou/core";
+import type { RepoContext, Repo } from "@rezzou/sdk";
 
 // Import Internal Dependencies
-import { editorConfigOperation } from "../editorConfig.ts";
+import { editorConfigOperation } from "../editor-config/editorConfig.ts";
 
 // CONSTANTS
 const kRepo: Repo = {
@@ -27,7 +27,7 @@ function makeCtx(content: string | null): RepoContext {
   };
 }
 
-describe("editorConfigOperation", () => {
+describe("UT editorConfigOperation", () => {
   it("should have 'editorconfig' as id", () => {
     assert.equal(editorConfigOperation.id, "editorconfig");
   });

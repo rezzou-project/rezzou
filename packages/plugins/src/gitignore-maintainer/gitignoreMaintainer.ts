@@ -1,5 +1,5 @@
 // Import Third-party Dependencies
-import type { Operation, RepoContext } from "@rezzou/core";
+import { defineOperation, type RepoContext } from "@rezzou/sdk";
 
 // CONSTANTS
 const kRequiredEntries = [
@@ -11,7 +11,7 @@ const kRequiredEntries = [
   "*.log"
 ];
 
-export const gitignoreMaintainerOperation = {
+export const gitignoreMaintainerOperation = defineOperation({
   id: "gitignore-maintainer",
   name: "Gitignore Maintainer",
   description: "Ensure common entries are present in .gitignore without altering existing content",
@@ -59,4 +59,4 @@ export const gitignoreMaintainerOperation = {
   commitMessage: () => "chore: update .gitignore",
   prTitle: () => "chore: update .gitignore",
   prDescription: () => "Automated update of .gitignore to include common entries, performed by Rezzou."
-} satisfies Operation;
+});

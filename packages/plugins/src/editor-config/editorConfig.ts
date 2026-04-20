@@ -1,5 +1,5 @@
 // Import Third-party Dependencies
-import type { Operation, RepoContext } from "@rezzou/core";
+import { defineOperation, type RepoContext } from "@rezzou/sdk";
 
 // CONSTANTS
 const kTemplate = `root = true
@@ -13,7 +13,7 @@ charset = utf-8
 trim_trailing_whitespace = true
 `;
 
-export const editorConfigOperation = {
+export const editorConfigOperation = defineOperation({
   id: "editorconfig",
   name: "EditorConfig",
   description: "Drop a standard .editorconfig if none exists",
@@ -38,4 +38,4 @@ export const editorConfigOperation = {
   commitMessage: () => "chore: add .editorconfig",
   prTitle: () => "chore: add .editorconfig",
   prDescription: () => "Automated creation of a standard .editorconfig, performed by Rezzou."
-} satisfies Operation;
+});
