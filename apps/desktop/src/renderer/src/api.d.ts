@@ -17,6 +17,8 @@ declare global {
       onOAuthAuthenticated(callback: (namespaces: Namespace[], provider: Provider) => void): () => void;
       onOAuthError(callback: (message: string) => void): () => void;
       onOperationsChanged(callback: (ops: { id: string; name: string; description: string; }[]) => void): () => void;
+      loadPlugin(filePath: string): Promise<{ id: string; name: string; version: string; }>;
+      pickAndLoadPlugin(): Promise<{ id: string; name: string; version: string; } | null>;
     };
   }
 }

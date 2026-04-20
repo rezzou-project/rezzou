@@ -92,5 +92,7 @@ contextBridge.exposeInMainWorld("api", {
     return () => ipcRenderer.removeListener("registry:operationsChanged", listener);
   },
 
-  loadPlugin: (filePath: string): Promise<PluginInfo> => ipcRenderer.invoke("plugin:load", { filePath })
+  loadPlugin: (filePath: string): Promise<PluginInfo> => ipcRenderer.invoke("plugin:load", { filePath }),
+
+  pickAndLoadPlugin: (): Promise<PluginInfo | null> => ipcRenderer.invoke("plugin:pick-and-load")
 });
