@@ -23,6 +23,7 @@ import {
 } from "./handlers.ts";
 import { listOperations, registry, type OperationInfo } from "./operation-registry.ts";
 import { loadPlugin } from "./plugin-loader.ts";
+import { readPluginPaths, addPluginPath } from "./plugins-store.ts";
 
 interface AuthenticateOptions {
   token: string;
@@ -148,10 +149,12 @@ app.on("open-url", async(event, url) => {
   }
 });
 
-app.whenReady().then(() => {
+app.whenReady().then(async() => {
   // Register rezzou:// as a custom URL scheme for OAuth callbacks.
   // In production, also configure "protocols" in electron-builder config.
   app.setAsDefaultProtocolClient("rezzou");
+
+  const missingPluginPaths: string[] = [];
 
   ipcMain.handle("oauth:github-device-start", async(event): Promise<{ user_code: string; verification_uri: string; }> => {
     if (!kGitHubClientId) {
@@ -281,9 +284,12 @@ app.whenReady().then(() => {
       return null;
     }
     const plugin = await loadPlugin(filePaths[0]).catch(toError);
+    addPluginPath(filePaths[0]);
 
     return { id: plugin.id, name: plugin.name, version: plugin.version };
   });
+
+  ipcMain.handle("plugin:getMissing", (): string[] => missingPluginPaths);
 
   ipcMain.handle("engine:getOperationDefaults", (_event, payload: GetOperationDefaultsOptions) => {
     const { operationId, inputs } = payload;
@@ -298,6 +304,19 @@ app.whenReady().then(() => {
 
     return handleFetchMembers(currentAdapter, namespace).catch(toError);
   });
+
+  for (const filePath of readPluginPaths()) {
+    if (!fs.existsSync(filePath)) {
+      missingPluginPaths.push(filePath);
+      continue;
+    }
+    try {
+      await loadPlugin(filePath);
+    }
+    catch {
+      missingPluginPaths.push(filePath);
+    }
+  }
 
   createWindow();
 

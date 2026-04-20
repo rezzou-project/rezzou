@@ -14,10 +14,16 @@ export function OperationPicker() {
   const [operations, setOperations] = useState<OperationInfo[]>([]);
   const [pluginLoading, setPluginLoading] = useState(false);
   const [pluginError, setPluginError] = useState<string | null>(null);
+  const [missingPlugins, setMissingPlugins] = useState<string[]>([]);
   const { selectedOperationId, setSelectedOperation, scanRepos, isLoading } = useAppStore();
 
   useEffect(() => {
     void window.api.listOperations().then(setOperations);
+    void window.api.getMissingPlugins().then((paths) => {
+      if (paths.length > 0) {
+        setMissingPlugins(paths);
+      }
+    });
 
     return window.api.onOperationsChanged(setOperations);
   }, []);
@@ -68,6 +74,15 @@ export function OperationPicker() {
           </label>
         ))}
       </div>
+
+      {missingPlugins.length > 0 && (
+        <div className="mb-4 rounded-lg border border-yellow-700 bg-yellow-950 px-4 py-3">
+          <p className="mb-1 text-xs font-medium text-yellow-400">Plugin(s) not found at startup:</p>
+          {missingPlugins.map((p) => (
+            <p key={p} className="truncate text-xs text-yellow-600">{p}</p>
+          ))}
+        </div>
+      )}
 
       {pluginError && (
         <p className="mb-4 text-xs text-red-400">{pluginError}</p>
