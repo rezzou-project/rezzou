@@ -3,7 +3,7 @@ import * as path from "node:path";
 import * as fs from "node:fs";
 
 // Import Third-party Dependencies
-import { app, BrowserWindow, shell, ipcMain, safeStorage } from "electron";
+import { app, BrowserWindow, shell, ipcMain, safeStorage, dialog } from "electron";
 import type { Repo, RepoDiff, ProviderAdapter, Provider, Namespace } from "@rezzou/core";
 
 // Import Internal Dependencies
@@ -93,7 +93,7 @@ function createWindow(): void {
     width: 1100,
     height: 800,
     webPreferences: {
-      preload: path.join(__dirname, "../preload/index.js")
+      preload: path.join(import.meta.dirname, "../preload/index.js")
     }
   });
 
@@ -101,7 +101,7 @@ function createWindow(): void {
     mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL);
   }
   else {
-    mainWindow.loadFile(path.join(__dirname, "../renderer/index.html"));
+    mainWindow.loadFile(path.join(import.meta.dirname, "../renderer/index.html"));
   }
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -268,6 +268,19 @@ app.whenReady().then(() => {
   ipcMain.handle("plugin:load", async(_event, payload: LoadPluginPayload): Promise<PluginInfo> => {
     const { filePath } = payload;
     const plugin = await loadPlugin(filePath).catch(toError);
+
+    return { id: plugin.id, name: plugin.name, version: plugin.version };
+  });
+
+  ipcMain.handle("plugin:pick-and-load", async(): Promise<PluginInfo | null> => {
+    const { canceled, filePaths } = await dialog.showOpenDialog({
+      properties: ["openFile"],
+      filters: [{ name: "Plugin", extensions: ["js", "mjs", "ts"] }]
+    });
+    if (canceled || filePaths.length === 0) {
+      return null;
+    }
+    const plugin = await loadPlugin(filePaths[0]).catch(toError);
 
     return { id: plugin.id, name: plugin.name, version: plugin.version };
   });

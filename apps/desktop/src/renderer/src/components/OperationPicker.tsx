@@ -12,6 +12,8 @@ interface OperationInfo {
 
 export function OperationPicker() {
   const [operations, setOperations] = useState<OperationInfo[]>([]);
+  const [pluginLoading, setPluginLoading] = useState(false);
+  const [pluginError, setPluginError] = useState<string | null>(null);
   const { selectedOperationId, setSelectedOperation, scanRepos, isLoading } = useAppStore();
 
   useEffect(() => {
@@ -19,6 +21,20 @@ export function OperationPicker() {
 
     return window.api.onOperationsChanged(setOperations);
   }, []);
+
+  async function handleLoadPlugin() {
+    setPluginLoading(true);
+    setPluginError(null);
+    try {
+      await window.api.pickAndLoadPlugin();
+    }
+    catch (err) {
+      setPluginError(err instanceof Error ? err.message : String(err));
+    }
+    finally {
+      setPluginLoading(false);
+    }
+  }
 
   return (
     <div>
@@ -53,13 +69,27 @@ export function OperationPicker() {
         ))}
       </div>
 
-      <button
-        onClick={scanRepos}
-        disabled={isLoading || operations.length === 0}
-        className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {isLoading ? "Scanning..." : "Scan repositories"}
-      </button>
+      {pluginError && (
+        <p className="mb-4 text-xs text-red-400">{pluginError}</p>
+      )}
+
+      <div className="flex items-center gap-3">
+        <button
+          onClick={scanRepos}
+          disabled={isLoading || operations.length === 0}
+          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isLoading ? "Scanning..." : "Scan repositories"}
+        </button>
+
+        <button
+          onClick={handleLoadPlugin}
+          disabled={pluginLoading}
+          className="rounded-lg border border-gray-700 px-4 py-2 text-sm font-medium text-gray-300 transition-colors hover:border-gray-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {pluginLoading ? "Loading..." : "Load a plugin…"}
+        </button>
+      </div>
     </div>
   );
 }
