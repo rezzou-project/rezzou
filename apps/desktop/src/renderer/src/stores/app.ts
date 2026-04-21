@@ -12,6 +12,9 @@ import type {
 
 // CONSTANTS
 const kConcurrency = 5;
+const kApplyConcurrency = 4;
+
+let applyAllAbortController: AbortController | null = null;
 
 type Step = "connect" | "home" | "repos" | "pick-operation" | "diffs" | "results" | "plugins";
 
@@ -56,6 +59,7 @@ interface AppState {
   operationOverrides: OperationOverrides;
   applyModalTarget: "single" | "all" | null;
   applyModalRepoPath: string | null;
+  isApplyingAll: boolean;
   isLoading: boolean;
   error: string | null;
 }
@@ -84,6 +88,7 @@ interface AppActions {
   confirmApply: () => Promise<void>;
   applyDiff: (repoPath: string) => Promise<void>;
   applyAll: () => Promise<void>;
+  cancelApplyAll: () => void;
   reset: () => void;
 }
 
@@ -104,6 +109,7 @@ const kInitialState: AppState = {
   operationOverrides: {},
   applyModalTarget: null,
   applyModalRepoPath: null,
+  isApplyingAll: false,
   isLoading: false,
   error: null
 };
@@ -376,11 +382,27 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
       const { diffs } = get();
       const pendingDiffs = diffs.filter((diff) => diff.applyStatus === applyStatus.Pending);
 
-      for (const diff of pendingDiffs) {
-        await get().applyDiff(diff.repo.fullPath);
-      }
+      applyAllAbortController = new AbortController();
+      const { signal } = applyAllAbortController;
+      set({ isApplyingAll: true });
 
-      set({ step: "results" });
+      try {
+        for (let i = 0; i < pendingDiffs.length; i += kApplyConcurrency) {
+          if (signal.aborted) {
+            break;
+          }
+          const batch = pendingDiffs.slice(i, i + kApplyConcurrency);
+          await Promise.all(batch.map((diff) => get().applyDiff(diff.repo.fullPath)));
+        }
+      }
+      finally {
+        applyAllAbortController = null;
+        set({ isApplyingAll: false, step: "results" });
+      }
+    },
+
+    cancelApplyAll: () => {
+      applyAllAbortController?.abort();
     },
 
     reset: () => {

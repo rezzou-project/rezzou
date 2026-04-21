@@ -368,11 +368,12 @@ interface OperationInfo {
 }
 
 export function DiffReview() {
-  const { diffs, openApplyModal, backToPickOperation, selectedOperationId } = useAppStore();
+  const { diffs, openApplyModal, backToPickOperation, selectedOperationId, isApplyingAll, cancelApplyAll } = useAppStore();
   const [selectedOp, setSelectedOp] = useState<OperationInfo | null>(null);
   const pendingCount = diffs.filter((diff) => diff.applyStatus === "pending").length;
   const doneCount = diffs.filter((diff) => diff.applyStatus === "done").length;
-  const isApplying = diffs.some((diff) => diff.applyStatus === "applying");
+  const applyingCount = diffs.filter((diff) => diff.applyStatus === "applying").length;
+  const isApplying = applyingCount > 0;
 
   useEffect(() => {
     void window.api.listOperations().then((ops) => {
@@ -411,18 +412,29 @@ export function DiffReview() {
           <h2 className="text-xl font-semibold">{selectedOp?.name ?? "Updates"}</h2>
           <p className="text-sm text-gray-400">
             {diffs.length} repos to update · {doneCount} done
+            {applyingCount > 0 && ` · ${applyingCount} applying`}
           </p>
         </div>
 
-        {pendingCount > 0 && (
-          <button
-            onClick={() => void openApplyModal("all")}
-            disabled={isApplying}
-            className="rounded-lg bg-green-700 px-4 py-1.5 text-sm font-medium transition-colors hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Apply all ({pendingCount})
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {isApplyingAll && (
+            <button
+              onClick={cancelApplyAll}
+              className="rounded-lg border border-red-700 px-4 py-1.5 text-sm font-medium text-red-400 transition-colors hover:bg-red-950"
+            >
+              Cancel
+            </button>
+          )}
+          {pendingCount > 0 && (
+            <button
+              onClick={() => void openApplyModal("all")}
+              disabled={isApplying}
+              className="rounded-lg bg-green-700 px-4 py-1.5 text-sm font-medium transition-colors hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Apply all ({pendingCount})
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-col gap-4">
