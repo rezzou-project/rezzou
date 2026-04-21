@@ -18,6 +18,12 @@ interface PluginInfo {
   version: string;
 }
 
+interface FilterInfo {
+  id: string;
+  name: string;
+  description?: string;
+}
+
 interface LoadedPluginInfo {
   id: string;
   name: string;
@@ -127,5 +133,23 @@ contextBridge.exposeInMainWorld("api", {
     ipcRenderer.on("registry:pluginsChanged", listener);
 
     return () => ipcRenderer.removeListener("registry:pluginsChanged", listener);
+  },
+
+  listFilters: (): Promise<FilterInfo[]> => ipcRenderer.invoke("engine:listFilters"),
+
+  filterRepos: (
+    repos: Repo[],
+    filterIds: string[]
+  ): Promise<string[]> => ipcRenderer.invoke("engine:filterRepos", { repos, filterIds }),
+
+  onFiltersChanged: (
+    callback: (filters: FilterInfo[]) => void
+  ): (() => void) => {
+    function listener(_event: unknown, filters: FilterInfo[]) {
+      callback(filters);
+    }
+    ipcRenderer.on("registry:filtersChanged", listener);
+
+    return () => ipcRenderer.removeListener("registry:filtersChanged", listener);
   }
 });
