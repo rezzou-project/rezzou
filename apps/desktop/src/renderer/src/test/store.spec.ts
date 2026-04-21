@@ -18,7 +18,8 @@ const kNamespace: Namespace = {
   id: "ns",
   name: "ns",
   displayName: "My Namespace",
-  type: "org"
+  type: "org",
+  provider: "gitlab"
 };
 const kDiff: RepoDiff = {
   repo: kRepo,
@@ -30,9 +31,9 @@ const kSubmitResult: SubmitResult = {
   prTitle: "chore: update license year"
 };
 
-const mockApiAutoLogin = mock.fn(async() => null);
+const mockApiAutoLogin = mock.fn(async() => null as { namespaces: Namespace[]; provider: "gitlab" | "github"; }[] | null);
 const mockApiAuthenticate = mock.fn(async() => [kNamespace] as Namespace[]);
-const mockApiLoadRepos = mock.fn(async() => [] as Repo[]);
+const mockApiLoadRepos = mock.fn(async(_namespace: string, _provider: string) => [] as Repo[]);
 const mockApiScanRepos = mock.fn(
   async(_repos: Repo[], _operationId: string, _inputs: Record<string, unknown>): Promise<RepoDiff[]> => []
 );
@@ -95,7 +96,7 @@ describe("authenticate", () => {
 
     const state = getState();
     assert.equal(state.step, "home");
-    assert.deepEqual(state.namespaces, namespaces);
+    assert.deepEqual(state.connectedProviders.gitlab, namespaces);
     assert.equal(state.isLoading, false);
     assert.equal(state.error, null);
   });
@@ -166,13 +167,13 @@ describe("loadRepos", () => {
     assert.equal(state.isLoading, false);
   });
 
-  it("should call window.api.loadRepos with namespace name", async() => {
+  it("should call window.api.loadRepos with namespace name and provider", async() => {
     mockApiLoadRepos.mock.mockImplementation(async() => []);
 
     await getState().loadRepos(kNamespace);
 
     assert.equal(mockApiLoadRepos.mock.callCount(), 1);
-    assert.deepEqual(mockApiLoadRepos.mock.calls[0].arguments, [kNamespace.name]);
+    assert.deepEqual(mockApiLoadRepos.mock.calls[0].arguments, [kNamespace.name, kNamespace.provider]);
   });
 });
 
@@ -530,7 +531,7 @@ describe("reset", () => {
     const state = getState();
     assert.equal(state.step, "connect");
     assert.deepEqual(state.repos, []);
-    assert.deepEqual(state.namespaces, []);
+    assert.deepEqual(state.connectedProviders, {});
     assert.equal(state.selectedNamespace, null);
     assert.deepEqual(state.selectedRepoIds, []);
     assert.equal(state.error, null);

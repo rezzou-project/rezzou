@@ -41,8 +41,7 @@ export type RepoStatsEntry = RepoStats | null | "loading";
 
 interface AppState {
   step: Step;
-  provider: Provider;
-  namespaces: Namespace[];
+  connectedProviders: Partial<Record<Provider, Namespace[]>>;
   selectedNamespace: Namespace | null;
   repoCounts: Record<string, number>;
   repos: Repo[];
@@ -85,8 +84,7 @@ interface AppActions {
 
 const kInitialState: AppState = {
   step: "connect",
-  provider: "gitlab",
-  namespaces: [],
+  connectedProviders: {},
   selectedNamespace: null,
   repoCounts: {},
   repos: [],
@@ -107,9 +105,13 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
     ...kInitialState,
 
     autoLogin: async() => {
-      const result = await window.api.autoLogin();
-      if (result !== null) {
-        set({ provider: result.provider, namespaces: result.namespaces, step: "home" });
+      const sessions = await window.api.autoLogin();
+      if (sessions !== null && sessions.length > 0) {
+        const connectedProviders: Partial<Record<Provider, Namespace[]>> = {};
+        for (const { provider, namespaces } of sessions) {
+          connectedProviders[provider] = namespaces;
+        }
+        set({ connectedProviders, step: "home" });
       }
     },
 
@@ -119,7 +121,13 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
       try {
         const namespaces = await window.api.authenticate(token, provider);
 
-        set({ provider, namespaces, isLoading: false, step: "home" });
+        set((state) => {
+          return {
+            connectedProviders: { ...state.connectedProviders, [provider]: namespaces },
+            isLoading: false,
+            step: state.step === "connect" ? "home" : state.step
+          };
+        });
       }
       catch (authenticateError) {
         set({
@@ -130,7 +138,14 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
     },
 
     receiveOAuthResult: (namespaces: Namespace[], provider: Provider) => {
-      set({ provider, namespaces, isLoading: false, error: null, step: "home" });
+      set((state) => {
+        return {
+          connectedProviders: { ...state.connectedProviders, [provider]: namespaces },
+          isLoading: false,
+          error: null,
+          step: state.step === "connect" ? "home" : state.step
+        };
+      });
     },
 
     goHome: () => {
@@ -145,7 +160,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
       set({ isLoading: true, error: null });
 
       try {
-        const repos = await window.api.loadRepos(namespace.name);
+        const repos = await window.api.loadRepos(namespace.name, namespace.provider);
 
         set((state) => {
           return {

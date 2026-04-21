@@ -70,6 +70,7 @@ describe("GitLabAdapter", () => {
         name: "john",
         displayName: "John Doe",
         type: "user",
+        provider: "gitlab",
         avatarUrl: void 0
       });
     });

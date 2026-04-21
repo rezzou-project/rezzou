@@ -139,6 +139,7 @@ describe("GitHubAdapter", () => {
         name: "john",
         displayName: "John Doe",
         type: "user",
+        provider: "github",
         avatarUrl: void 0
       });
     });

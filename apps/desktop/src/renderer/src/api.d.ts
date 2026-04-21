@@ -11,9 +11,9 @@ interface LoadedPluginInfo {
 declare global {
   interface Window {
     api: {
-      autoLogin(): Promise<{ namespaces: Namespace[]; provider: Provider; } | null>;
+      autoLogin(): Promise<{ namespaces: Namespace[]; provider: Provider; }[] | null>;
       authenticate(token: string, provider: Provider): Promise<Namespace[]>;
-      loadRepos(namespace: string): Promise<Repo[]>;
+      loadRepos(namespace: string, provider: Provider): Promise<Repo[]>;
       scanRepos(repos: Repo[], operationId: string, inputs: Record<string, unknown>): Promise<RepoDiff[]>;
       applyDiff(diff: RepoDiff, options: { inputs: Record<string, unknown>; operationId: string; overrides?: OperationOverrides; }): Promise<SubmitResult>;
       listOperations(): Promise<{ id: string; name: string; description: string; }[]>;

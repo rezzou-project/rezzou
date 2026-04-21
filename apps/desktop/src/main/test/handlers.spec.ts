@@ -172,7 +172,7 @@ describe("handleAuthenticate", () => {
 
   it("should create a GitLabAdapter and return namespaces for gitlab provider", async() => {
     const namespaces: Namespace[] = [
-      { id: "1", name: "testuser", displayName: "Test User", type: "user" }
+      { id: "1", name: "testuser", displayName: "Test User", type: "user", provider: "gitlab" }
     ];
     mockListNamespaces.mock.mockImplementation(async() => namespaces);
 
@@ -185,8 +185,8 @@ describe("handleAuthenticate", () => {
 
   it("should create a GitHubAdapter and return namespaces for github provider", async() => {
     const namespaces: Namespace[] = [
-      { id: "john", name: "john", displayName: "John", type: "user" },
-      { id: "my-org", name: "my-org", displayName: "my-org", type: "org" }
+      { id: "john", name: "john", displayName: "John", type: "user", provider: "github" },
+      { id: "my-org", name: "my-org", displayName: "my-org", type: "org", provider: "github" }
     ];
     mockListNamespaces.mock.mockImplementation(async() => namespaces);
 
@@ -199,7 +199,7 @@ describe("handleAuthenticate", () => {
 
   it("should return only the user namespace when the user has no orgs", async() => {
     const namespaces: Namespace[] = [
-      { id: "solo", name: "solo", displayName: "Solo Dev", type: "user" }
+      { id: "solo", name: "solo", displayName: "Solo Dev", type: "user", provider: "gitlab" }
     ];
     mockListNamespaces.mock.mockImplementation(async() => namespaces);
 
