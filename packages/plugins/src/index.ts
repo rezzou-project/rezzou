@@ -5,3 +5,6 @@ export { addFilePlugin } from "./add-file/index.ts";
 export { removeFilePlugin } from "./remove-file/index.ts";
 export { renameFilePlugin } from "./rename-file/index.ts";
 export { replacePatternPlugin } from "./replace-pattern/index.ts";
+export { hasFile } from "./filters/hasFile.ts";
+export { fileContains } from "./filters/fileContains.ts";
+export { defaultBranchIs } from "./filters/defaultBranchIs.ts";
