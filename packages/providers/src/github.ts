@@ -1,6 +1,6 @@
 // Import Third-party Dependencies
 import { Octokit } from "@octokit/rest";
-import type { NamespaceType, Namespace, Repo, FileContent, SubmitParams, SubmitResult, Member } from "@rezzou/core";
+import type { NamespaceType, Namespace, Repo, FileContent, SubmitParams, SubmitResult, Member, RepoStats } from "@rezzou/core";
 
 // Import Internal Dependencies
 import { BaseProvider } from "./base.ts";
@@ -208,5 +208,21 @@ export class GitHubAdapter extends BaseProvider {
     return data.map((user) => {
       return { username: user.login, avatarUrl: user.avatar_url };
     });
+  }
+
+  async getRepoStats(repoPath: string): Promise<RepoStats> {
+    const [owner, repo] = repoPath.split("/");
+
+    const [{ data: prs }, { data: repoData }, { data: branches }] = await Promise.all([
+      this.#client.pulls.list({ owner, repo, state: "open", per_page: 100 }),
+      this.#client.repos.get({ owner, repo }),
+      this.#client.repos.listBranches({ owner, repo, per_page: 100 })
+    ]);
+
+    return {
+      openMRs: prs.length,
+      openIssues: Math.max(0, repoData.open_issues_count - prs.length),
+      branches: branches.length
+    };
   }
 }

@@ -108,6 +108,12 @@ export interface Member {
   avatarUrl?: string;
 }
 
+export interface RepoStats {
+  openMRs: number;
+  openIssues: number;
+  branches: number;
+}
+
 export interface ProviderAdapter {
   readonly provider: Provider;
   listNamespaces(): Promise<Namespace[]>;
@@ -116,6 +122,7 @@ export interface ProviderAdapter {
   listTree(repoPath: string, branch: string): Promise<string[]>;
   submitChanges(params: SubmitParams): Promise<SubmitResult>;
   listMembers(namespace: string): Promise<Member[]>;
+  getRepoStats(repoPath: string): Promise<RepoStats>;
 }
 
 export interface RepoDiff {

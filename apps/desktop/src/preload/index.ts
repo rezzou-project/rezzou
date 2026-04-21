@@ -8,7 +8,8 @@ import type {
   Namespace,
   Member,
   OperationDefaults,
-  OperationOverrides
+  OperationOverrides,
+  RepoStats
 } from "@rezzou/core";
 
 interface PluginInfo {
@@ -57,6 +58,8 @@ contextBridge.exposeInMainWorld("api", {
   ): Promise<OperationDefaults> => ipcRenderer.invoke("engine:getOperationDefaults", { operationId, inputs }),
 
   fetchMembers: (namespace: string): Promise<Member[]> => ipcRenderer.invoke("engine:fetchMembers", namespace),
+
+  getRepoStats: (repoPath: string): Promise<RepoStats> => ipcRenderer.invoke("engine:getRepoStats", { repoPath }),
 
   autoLogin: (): Promise<{ namespaces: Namespace[]; provider: Provider; } | null> => ipcRenderer.invoke("auth:auto-login"),
 

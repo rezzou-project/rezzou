@@ -14,7 +14,8 @@ import {
   type ProviderAdapter,
   type OperationDefaults,
   type OperationOverrides,
-  type Member
+  type Member,
+  type RepoStats
 } from "@rezzou/core";
 
 // Import Internal Dependencies
@@ -109,6 +110,13 @@ export async function handleFetchMembers(
   namespace: string
 ): Promise<Member[]> {
   return adapter.listMembers(namespace);
+}
+
+export async function handleGetRepoStats(
+  adapter: ProviderAdapter,
+  repoPath: string
+): Promise<RepoStats> {
+  return adapter.getRepoStats(repoPath);
 }
 
 export interface GitHubDeviceFlowStart {
