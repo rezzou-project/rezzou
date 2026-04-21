@@ -4,3 +4,4 @@ export { editorConfigPlugin } from "./editor-config/index.ts";
 export { addFilePlugin } from "./add-file/index.ts";
 export { removeFilePlugin } from "./remove-file/index.ts";
 export { renameFilePlugin } from "./rename-file/index.ts";
+export { replacePatternPlugin } from "./replace-pattern/index.ts";
