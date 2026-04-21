@@ -31,6 +31,11 @@ interface AuthenticateOptions {
   provider: Provider;
 }
 
+interface LoadReposPayload {
+  namespace: string;
+  provider: Provider;
+}
+
 interface ScanReposPayload {
   repos: Repo[];
   operationId: string;
@@ -72,6 +77,7 @@ const kCredentialsFile = "credentials.json";
 const kGitHubClientId = import.meta.env.MAIN_VITE_GITHUB_CLIENT_ID as string;
 const kGitLabClientId = import.meta.env.MAIN_VITE_GITLAB_CLIENT_ID as string;
 
+const adapters = new Map<Provider, ProviderAdapter>();
 let currentAdapter: ProviderAdapter | null = null;
 let mainWindow: BrowserWindow | null = null;
 let pendingGitLabVerifier: string | null = null;
@@ -84,31 +90,51 @@ function getCredentialsPath(): string {
 }
 
 function saveCredentials(token: string, provider: Provider): void {
-  const encrypted = safeStorage.encryptString(token);
-  fs.writeFileSync(getCredentialsPath(), JSON.stringify({ token: encrypted.toString("base64"), provider }));
+  const credPath = getCredentialsPath();
+  let existing: Record<string, string> = {};
+
+  if (fs.existsSync(credPath)) {
+    try {
+      existing = JSON.parse(fs.readFileSync(credPath, "utf-8")) as Record<string, string>;
+    }
+    catch {
+      // ignore malformed file
+    }
+  }
+
+  const encrypted = safeStorage.encryptString(token).toString("base64");
+  fs.writeFileSync(credPath, JSON.stringify({ ...existing, [provider]: encrypted }));
 }
 
-function loadSavedCredentials(): { token: string; provider: Provider; } | null {
+function loadSavedCredentials(): { token: string; provider: Provider; }[] {
   const credPath = getCredentialsPath();
   if (!fs.existsSync(credPath)) {
-    return null;
+    return [];
   }
 
   try {
     const raw = JSON.parse(fs.readFileSync(credPath, "utf-8")) as Record<string, string>;
-    if (!raw.token || !raw.provider) {
-      return null;
+    const providers: Provider[] = ["github", "gitlab"];
+    const results: { token: string; provider: Provider; }[] = [];
+
+    for (const provider of providers) {
+      if (!raw[provider]) {
+        continue;
+      }
+
+      try {
+        const token = safeStorage.decryptString(Buffer.from(raw[provider], "base64"));
+        results.push({ token, provider });
+      }
+      catch {
+        // skip corrupted entry
+      }
     }
 
-    const token = safeStorage.decryptString(Buffer.from(raw.token, "base64"));
-
-    return {
-      token,
-      provider: raw.provider as Provider
-    };
+    return results;
   }
   catch {
-    return null;
+    return [];
   }
 }
 
@@ -163,7 +189,7 @@ app.on("open-url", async(event, url) => {
   try {
     const token = await handleGitLabOAuthCallback(kGitLabClientId, code, verifier);
     const { adapter, namespaces } = await handleAuthenticate(token, "gitlab");
-    currentAdapter = adapter;
+    adapters.set("gitlab", adapter);
     saveCredentials(token, "gitlab");
     mainWindow?.webContents.send("oauth:authenticated", namespaces, "gitlab");
   }
@@ -194,7 +220,7 @@ app.whenReady().then(async() => {
     handleGitHubDevicePoll({ clientId: kGitHubClientId, deviceCode: device_code, interval, signal })
       .then(async(token) => {
         const { adapter, namespaces } = await handleAuthenticate(token, "github");
-        currentAdapter = adapter;
+        adapters.set("github", adapter);
         saveCredentials(token, "github");
         githubDeviceAbortController = null;
         event.sender.send("oauth:authenticated", namespaces, "github");
@@ -228,21 +254,25 @@ app.whenReady().then(async() => {
     pendingGitLabVerifier = null;
   });
 
-  ipcMain.handle("auth:auto-login", async(): Promise<{ namespaces: Namespace[]; provider: Provider; } | null> => {
+  ipcMain.handle("auth:auto-login", async(): Promise<{ namespaces: Namespace[]; provider: Provider; }[] | null> => {
     const saved = loadSavedCredentials();
-    if (!saved) {
+    if (saved.length === 0) {
       return null;
     }
 
-    try {
-      const { adapter, namespaces } = await handleAuthenticate(saved.token, saved.provider);
-      currentAdapter = adapter;
+    const sessions: { namespaces: Namespace[]; provider: Provider; }[] = [];
+    for (const { token, provider } of saved) {
+      try {
+        const { adapter, namespaces } = await handleAuthenticate(token, provider);
+        adapters.set(provider, adapter);
+        sessions.push({ namespaces, provider });
+      }
+      catch {
+        // skip failed provider
+      }
+    }
 
-      return { namespaces, provider: saved.provider };
-    }
-    catch {
-      return null;
-    }
+    return sessions.length > 0 ? sessions : null;
   });
 
   ipcMain.handle("auth:authenticate", async(_event, options: AuthenticateOptions): Promise<Namespace[]> => {
@@ -250,18 +280,22 @@ app.whenReady().then(async() => {
 
     const { adapter, namespaces } = await handleAuthenticate(token, provider).catch(toError);
 
-    currentAdapter = adapter;
+    adapters.set(provider, adapter);
     saveCredentials(token, provider);
 
     return namespaces;
   });
 
-  ipcMain.handle("auth:loadRepos", async(_event, namespace: string): Promise<Repo[]> => {
-    if (currentAdapter === null) {
-      throw new Error("Not connected");
+  ipcMain.handle("auth:loadRepos", async(_event, payload: LoadReposPayload): Promise<Repo[]> => {
+    const { namespace, provider } = payload;
+    const adapter = adapters.get(provider);
+    if (!adapter) {
+      throw new Error(`Not connected to ${provider}`);
     }
 
-    return handleLoadRepos(currentAdapter, namespace).catch(toError);
+    currentAdapter = adapter;
+
+    return handleLoadRepos(adapter, namespace).catch(toError);
   });
 
   ipcMain.handle("engine:scanRepos", async(_event, payload: ScanReposPayload): Promise<RepoDiff[]> => {

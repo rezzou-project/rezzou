@@ -26,6 +26,7 @@ export class GitLabAdapter extends BaseProvider {
         name: String(user.username),
         displayName: String(user.name),
         type: "user",
+        provider: "gitlab" as const,
         avatarUrl: user.avatar_url ? String(user.avatar_url) : void 0
       },
       ...groups.map((group) => {
@@ -34,6 +35,7 @@ export class GitLabAdapter extends BaseProvider {
           name: String(group.full_path),
           displayName: String(group.name),
           type: "org" as NamespaceType,
+          provider: "gitlab" as const,
           avatarUrl: group.avatar_url ? String(group.avatar_url) : void 0
         };
       })

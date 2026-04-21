@@ -1,5 +1,5 @@
 // Import Third-party Dependencies
-import { useState, useEffect } from "react";
+import { useState } from "react";
 
 // Import Internal Dependencies
 import { useAppStore } from "../stores/app.js";
@@ -11,29 +11,14 @@ type OAuthState =
   | { status: "error"; message: string; };
 
 export function HomePage() {
-  const namespaces = useAppStore((state) => state.namespaces);
+  const connectedProviders = useAppStore((state) => state.connectedProviders);
   const repoCounts = useAppStore((state) => state.repoCounts);
   const isLoading = useAppStore((state) => state.isLoading);
-  const provider = useAppStore((state) => state.provider);
   const loadRepos = useAppStore((state) => state.loadRepos);
-  const receiveOAuthResult = useAppStore((state) => state.receiveOAuthResult);
   const [oauthState, setOAuthState] = useState<OAuthState>({ status: "idle" });
 
-  useEffect(() => {
-    const unsubAuth = window.api.onOAuthAuthenticated((updatedNamespaces, oauthProvider) => {
-      setOAuthState({ status: "idle" });
-      receiveOAuthResult(updatedNamespaces, oauthProvider);
-    });
-
-    const unsubError = window.api.onOAuthError((message) => {
-      setOAuthState({ status: "error", message });
-    });
-
-    return () => {
-      unsubAuth();
-      unsubError();
-    };
-  }, [receiveOAuthResult]);
+  const namespaces = Object.values(connectedProviders).flat();
+  const isGitHubConnected = connectedProviders.github !== undefined;
 
   async function handleGrantAccess() {
     setOAuthState({ status: "idle" });
@@ -65,7 +50,7 @@ export function HomePage() {
 
           return (
             <button
-              key={namespace.id}
+              key={`${namespace.provider}:${namespace.id}`}
               type="button"
               onClick={() => void loadRepos(namespace)}
               disabled={isLoading}
@@ -84,7 +69,7 @@ export function HomePage() {
         })}
       </div>
 
-      {provider === "github" && (
+      {isGitHubConnected && (
         <div className="mt-6">
           {oauthState.status === "github-device" ? (
             <div className="flex flex-col gap-3 rounded-lg border border-gray-700 bg-gray-900 p-4">

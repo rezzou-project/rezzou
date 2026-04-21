@@ -6,6 +6,7 @@ export interface Namespace {
   name: string;
   displayName: string;
   type: NamespaceType;
+  provider: Provider;
   avatarUrl?: string;
 }
 

@@ -36,6 +36,7 @@ export class GitHubAdapter extends BaseProvider {
         name: user.login,
         displayName: user.name ?? user.login,
         type: "user",
+        provider: "github",
         avatarUrl: user.avatar_url
       },
       ...orgs.map((org) => {
@@ -44,6 +45,7 @@ export class GitHubAdapter extends BaseProvider {
           name: org.login,
           displayName: org.login,
           type: "org" as NamespaceType,
+          provider: "github" as const,
           avatarUrl: org.avatar_url
         };
       })

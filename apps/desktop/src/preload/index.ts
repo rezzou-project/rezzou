@@ -37,7 +37,10 @@ contextBridge.exposeInMainWorld("api", {
     provider: Provider
   ): Promise<Namespace[]> => ipcRenderer.invoke("auth:authenticate", { token, provider }),
 
-  loadRepos: (namespace: string): Promise<Repo[]> => ipcRenderer.invoke("auth:loadRepos", namespace),
+  loadRepos: (
+    namespace: string,
+    provider: Provider
+  ): Promise<Repo[]> => ipcRenderer.invoke("auth:loadRepos", { namespace, provider }),
 
   scanRepos: (
     repos: Repo[],
@@ -61,7 +64,7 @@ contextBridge.exposeInMainWorld("api", {
 
   getRepoStats: (repoPath: string): Promise<RepoStats> => ipcRenderer.invoke("engine:getRepoStats", { repoPath }),
 
-  autoLogin: (): Promise<{ namespaces: Namespace[]; provider: Provider; } | null> => ipcRenderer.invoke("auth:auto-login"),
+  autoLogin: (): Promise<{ namespaces: Namespace[]; provider: Provider; }[] | null> => ipcRenderer.invoke("auth:auto-login"),
 
   startGitHubOAuth: (): Promise<{
     user_code: string;
