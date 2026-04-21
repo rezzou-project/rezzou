@@ -159,7 +159,10 @@ const kMockAdapter: ProviderAdapter = {
   getFile: mockGetFile,
   listTree: mockListTree,
   submitChanges: mockSubmitChanges,
-  listMembers: mockListMembers
+  listMembers: mockListMembers,
+  getRepoStats: mock.fn(async() => {
+    return { openMRs: 0, openIssues: 0, branches: 1 };
+  })
 };
 
 describe("handleAuthenticate", () => {

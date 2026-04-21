@@ -1,6 +1,17 @@
 // Import Third-party Dependencies
 import { create } from "zustand";
-import type { Provider, Namespace, Repo, RepoDiff as BaseRepoDiff, SubmitResult, OperationOverrides } from "@rezzou/core";
+import type {
+  Provider,
+  Namespace,
+  Repo,
+  RepoDiff as BaseRepoDiff,
+  SubmitResult,
+  OperationOverrides,
+  RepoStats
+} from "@rezzou/core";
+
+// CONSTANTS
+const kConcurrency = 5;
 
 type Step = "connect" | "home" | "repos" | "pick-operation" | "diffs" | "results" | "plugins";
 
@@ -26,6 +37,8 @@ export interface RepoDiff extends BaseRepoDiff {
   error?: string;
 }
 
+export type RepoStatsEntry = RepoStats | null | "loading";
+
 interface AppState {
   step: Step;
   provider: Provider;
@@ -34,6 +47,7 @@ interface AppState {
   repoCounts: Record<string, number>;
   repos: Repo[];
   selectedRepoIds: string[];
+  repoStats: Record<string, RepoStatsEntry>;
   selectedOperationId: string;
   diffs: RepoDiff[];
   operationInputs: Record<string, unknown>;
@@ -51,6 +65,7 @@ interface AppActions {
   goHome: () => void;
   goToPlugins: () => void;
   loadRepos: (namespace: Namespace) => Promise<void>;
+  loadAllRepoStats: () => Promise<void>;
   toggleRepo: (id: string) => void;
   selectAll: () => void;
   deselectAll: () => void;
@@ -76,6 +91,7 @@ const kInitialState: AppState = {
   repoCounts: {},
   repos: [],
   selectedRepoIds: [],
+  repoStats: {},
   selectedOperationId: "license-year",
   diffs: [],
   operationInputs: {},
@@ -118,7 +134,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
     },
 
     goHome: () => {
-      set({ step: "home", selectedNamespace: null, repos: [], selectedRepoIds: [], diffs: [] });
+      set({ step: "home", selectedNamespace: null, repos: [], selectedRepoIds: [], diffs: [], repoStats: {} });
     },
 
     goToPlugins: () => {
@@ -138,15 +154,43 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
             repos,
             selectedRepoIds: repos.map((repo) => repo.id),
             isLoading: false,
+            repoStats: {},
             repoCounts: { ...state.repoCounts, [namespace.id]: repos.length }
           };
         });
+
+        void get().loadAllRepoStats();
       }
       catch (loadReposError) {
         set({
           isLoading: false,
           error: ipcErrorMessage(loadReposError, "Failed to load repositories")
         });
+      }
+    },
+
+    loadAllRepoStats: async() => {
+      const { repos } = get();
+
+      set({ repoStats: Object.fromEntries(repos.map((repo) => [repo.id, "loading" as const])) });
+
+      for (let i = 0; i < repos.length; i += kConcurrency) {
+        const batch = repos.slice(i, i + kConcurrency);
+        await Promise.all(
+          batch.map(async(repo) => {
+            try {
+              const stats = await window.api.getRepoStats(repo.fullPath);
+              set((state) => {
+                return { repoStats: { ...state.repoStats, [repo.id]: stats } };
+              });
+            }
+            catch {
+              set((state) => {
+                return { repoStats: { ...state.repoStats, [repo.id]: null } };
+              });
+            }
+          })
+        );
       }
     },
 

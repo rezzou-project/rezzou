@@ -6,7 +6,7 @@ import { useAppStore } from "./stores/app.js";
 import { SetupForm } from "./components/SetupForm.js";
 import { Sidebar } from "./components/Sidebar.js";
 import { HomePage } from "./components/HomePage.js";
-import { RepoList } from "./components/RepoList.js";
+import { RepoDashboard } from "./components/RepoDashboard.js";
 import { OperationPicker } from "./components/OperationPicker.js";
 import { DiffReview } from "./components/DiffReview.js";
 import { ResultPanel } from "./components/ResultPanel.js";
@@ -40,7 +40,7 @@ export function App() {
       <div className="flex flex-1 flex-col">
         <main className="mx-auto w-full max-w-4xl px-6 py-8">
           {step === "home" && <HomePage />}
-          {step === "repos" && <RepoList />}
+          {step === "repos" && <RepoDashboard />}
           {step === "pick-operation" && <OperationPicker />}
           {step === "diffs" && <DiffReview />}
           {step === "results" && <ResultPanel />}

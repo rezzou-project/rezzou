@@ -1,4 +1,4 @@
-import type { Repo, RepoDiff, SubmitResult, Provider, Namespace, Member, OperationDefaults, OperationOverrides } from "@rezzou/core";
+import type { Repo, RepoDiff, SubmitResult, Provider, Namespace, Member, OperationDefaults, OperationOverrides, RepoStats } from "@rezzou/core";
 
 interface LoadedPluginInfo {
   id: string;
@@ -19,6 +19,7 @@ declare global {
       listOperations(): Promise<{ id: string; name: string; description: string; }[]>;
       getOperationDefaults(operationId: string, inputs: Record<string, unknown>): Promise<OperationDefaults>;
       fetchMembers(namespace: string): Promise<Member[]>;
+      getRepoStats(repoPath: string): Promise<RepoStats>;
       startGitHubOAuth(): Promise<{ user_code: string; verification_uri: string; }>;
       startGitLabOAuth(): Promise<void>;
       cancelOAuth(): Promise<void>;

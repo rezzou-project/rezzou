@@ -1,6 +1,6 @@
 // Import Third-party Dependencies
 import { Gitlab } from "@gitbeaker/rest";
-import type { NamespaceType, Namespace, Repo, FileContent, SubmitParams, SubmitResult, Member } from "@rezzou/core";
+import type { NamespaceType, Namespace, Repo, FileContent, SubmitParams, SubmitResult, Member, RepoStats } from "@rezzou/core";
 
 // Import Internal Dependencies
 import { BaseProvider } from "./base.ts";
@@ -149,5 +149,19 @@ export class GitLabAdapter extends BaseProvider {
         avatarUrl: member.avatar_url ? String(member.avatar_url) : void 0
       };
     });
+  }
+
+  async getRepoStats(repoPath: string): Promise<RepoStats> {
+    const [mrs, issues, branches] = await Promise.all([
+      this.#client.MergeRequests.all({ projectId: repoPath, state: "opened", perPage: 100, maxPages: 1 }),
+      this.#client.Issues.all({ projectId: repoPath, state: "opened", perPage: 100, maxPages: 1 }),
+      this.#client.Branches.all(repoPath, { perPage: 100, maxPages: 1 })
+    ]);
+
+    return {
+      openMRs: mrs.length,
+      openIssues: issues.length,
+      branches: branches.length
+    };
   }
 }

@@ -13,6 +13,7 @@ export type {
   SubmitResult,
   ProviderAdapter,
   Member,
+  RepoStats,
   Operation,
   OperationDefaults,
   OperationOverrides,

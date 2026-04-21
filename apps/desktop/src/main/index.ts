@@ -14,6 +14,7 @@ import {
   handleApplyDiff,
   handleGetOperationDefaults,
   handleFetchMembers,
+  handleGetRepoStats,
   handleGitHubDeviceStart,
   handleGitHubDevicePoll,
   handleGitLabOAuthStart,
@@ -34,6 +35,10 @@ interface ScanReposPayload {
   repos: Repo[];
   operationId: string;
   inputs: Record<string, unknown>;
+}
+
+interface GetRepoStatsPayload {
+  repoPath: string;
 }
 
 interface LoadPluginPayload {
@@ -366,6 +371,15 @@ app.whenReady().then(async() => {
     }
 
     return handleFetchMembers(currentAdapter, namespace).catch(toError);
+  });
+
+  ipcMain.handle("engine:getRepoStats", async(_event, payload: GetRepoStatsPayload) => {
+    const { repoPath } = payload;
+    if (currentAdapter === null) {
+      throw new Error("Not connected");
+    }
+
+    return handleGetRepoStats(currentAdapter, repoPath).catch(toError);
   });
 
   const persistedPaths = readPluginPaths();
