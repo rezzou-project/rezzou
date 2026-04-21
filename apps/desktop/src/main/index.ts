@@ -4,7 +4,7 @@ import * as fs from "node:fs";
 
 // Import Third-party Dependencies
 import { app, BrowserWindow, shell, ipcMain, safeStorage, dialog } from "electron";
-import type { Repo, RepoDiff, ProviderAdapter, Provider, Namespace } from "@rezzou/core";
+import { ApiRepoContext, type Repo, type RepoDiff, type ProviderAdapter, type Provider, type Namespace } from "@rezzou/core";
 
 // Import Internal Dependencies
 import {
@@ -23,6 +23,7 @@ import {
   type GetOperationDefaultsOptions
 } from "./handlers.ts";
 import { listOperations, registry, type OperationInfo } from "./operation-registry.ts";
+import { filterRegistry } from "./filter-registry.ts";
 import { loadPlugin, unregisterPluginByPath } from "./plugin-loader.ts";
 import { readPluginPaths, addPluginPath, removePluginPath, scanPluginsDir } from "./plugins-store.ts";
 
@@ -70,6 +71,11 @@ interface UnloadPluginPayload {
 
 interface ReloadPluginPayload {
   filePath: string;
+}
+
+interface FilterReposPayload {
+  repos: Repo[];
+  filterIds: string[];
 }
 
 // CONSTANTS
@@ -325,6 +331,28 @@ app.whenReady().then(async() => {
 
   ipcMain.handle("engine:listOperations", (): OperationInfo[] => listOperations());
 
+  ipcMain.handle("engine:listFilters", () => filterRegistry.list());
+
+  ipcMain.handle("engine:filterRepos", async(_event, payload: FilterReposPayload): Promise<string[]> => {
+    const { repos, filterIds } = payload;
+    if (currentAdapter === null) {
+      throw new Error("Not connected");
+    }
+
+    const filters = filterIds.map((id) => filterRegistry.get(id));
+    const passingIds: string[] = [];
+
+    for (const repo of repos) {
+      const ctx = new ApiRepoContext(currentAdapter, repo);
+      const results = await Promise.all(filters.map((filter) => filter.test(ctx)));
+      if (results.every(Boolean)) {
+        passingIds.push(repo.id);
+      }
+    }
+
+    return passingIds;
+  });
+
   ipcMain.handle("plugin:load", async(_event, payload: LoadPluginPayload): Promise<PluginInfo> => {
     const { filePath } = payload;
     const plugin = await loadPlugin(filePath).catch(toError);
@@ -461,6 +489,10 @@ app.whenReady().then(async() => {
 
   registry.on("change", function onRegistryChange() {
     mainWindow?.webContents.send("registry:operationsChanged", registry.list());
+  });
+
+  filterRegistry.on("change", function onFilterRegistryChange() {
+    mainWindow?.webContents.send("registry:filtersChanged", filterRegistry.list());
   });
 
   app.on("activate", () => {

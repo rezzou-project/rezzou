@@ -47,6 +47,9 @@ interface AppState {
   repos: Repo[];
   selectedRepoIds: string[];
   repoStats: Record<string, RepoStatsEntry>;
+  activeFilterIds: string[];
+  isFilteringRepos: boolean;
+  filteredRepoIds: string[] | null;
   selectedOperationId: string;
   diffs: RepoDiff[];
   operationInputs: Record<string, unknown>;
@@ -68,6 +71,8 @@ interface AppActions {
   toggleRepo: (id: string) => void;
   selectAll: () => void;
   deselectAll: () => void;
+  toggleFilter: (filterId: string) => Promise<void>;
+  clearFilters: () => void;
   proceedToPickOperation: () => void;
   backToPickOperation: () => void;
   setSelectedOperation: (id: string) => void;
@@ -90,6 +95,9 @@ const kInitialState: AppState = {
   repos: [],
   selectedRepoIds: [],
   repoStats: {},
+  activeFilterIds: [],
+  isFilteringRepos: false,
+  filteredRepoIds: null,
   selectedOperationId: "license-year",
   diffs: [],
   operationInputs: {},
@@ -170,7 +178,9 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
             selectedRepoIds: repos.map((repo) => repo.id),
             isLoading: false,
             repoStats: {},
-            repoCounts: { ...state.repoCounts, [namespace.id]: repos.length }
+            repoCounts: { ...state.repoCounts, [namespace.id]: repos.length },
+            activeFilterIds: [],
+            filteredRepoIds: null
           };
         });
 
@@ -221,12 +231,41 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
     },
 
     selectAll: () => {
-      const { repos } = get();
-      set({ selectedRepoIds: repos.map((repo) => repo.id) });
+      const { repos, filteredRepoIds } = get();
+      set({ selectedRepoIds: filteredRepoIds ?? repos.map((repo) => repo.id) });
     },
 
     deselectAll: () => {
       set({ selectedRepoIds: [] });
+    },
+
+    toggleFilter: async(filterId: string) => {
+      const { activeFilterIds, repos } = get();
+      const isActive = activeFilterIds.includes(filterId);
+      const newActiveFilterIds = isActive
+        ? activeFilterIds.filter((id) => id !== filterId)
+        : [...activeFilterIds, filterId];
+
+      set({ activeFilterIds: newActiveFilterIds });
+
+      if (newActiveFilterIds.length === 0) {
+        set({ filteredRepoIds: null });
+
+        return;
+      }
+
+      set({ isFilteringRepos: true });
+      try {
+        const passingIds = await window.api.filterRepos(repos, newActiveFilterIds);
+        set({ filteredRepoIds: passingIds, isFilteringRepos: false });
+      }
+      catch {
+        set({ isFilteringRepos: false });
+      }
+    },
+
+    clearFilters: () => {
+      set({ activeFilterIds: [], filteredRepoIds: null });
     },
 
     proceedToPickOperation: () => {

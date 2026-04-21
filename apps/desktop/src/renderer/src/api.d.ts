@@ -8,6 +8,12 @@ interface LoadedPluginInfo {
   source: "persisted" | "auto-scanned";
 }
 
+interface FilterInfo {
+  id: string;
+  name: string;
+  description?: string;
+}
+
 declare global {
   interface Window {
     api: {
@@ -33,6 +39,9 @@ declare global {
       unloadPlugin(filePath: string): Promise<void>;
       reloadPlugin(filePath: string): Promise<{ id: string; name: string; version: string; }>;
       onPluginsChanged(callback: (plugins: LoadedPluginInfo[]) => void): () => void;
+      listFilters(): Promise<FilterInfo[]>;
+      filterRepos(repos: Repo[], filterIds: string[]): Promise<string[]>;
+      onFiltersChanged(callback: (filters: FilterInfo[]) => void): () => void;
     };
   }
 }
