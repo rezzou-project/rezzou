@@ -7,7 +7,8 @@ import {
   gitignoreMaintainerPlugin,
   editorConfigPlugin,
   addFilePlugin,
-  removeFilePlugin
+  removeFilePlugin,
+  renameFilePlugin
 } from "@rezzou/plugins";
 import type { Operation } from "@rezzou/core";
 
@@ -16,7 +17,8 @@ const kBuiltinOperations = [
   gitignoreMaintainerPlugin,
   editorConfigPlugin,
   addFilePlugin,
-  removeFilePlugin]
+  removeFilePlugin,
+  renameFilePlugin]
   .flatMap((plugin) => plugin.operations);
 
 export interface OperationInfo {
