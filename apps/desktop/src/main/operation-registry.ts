@@ -8,7 +8,8 @@ import {
   editorConfigPlugin,
   addFilePlugin,
   removeFilePlugin,
-  renameFilePlugin
+  renameFilePlugin,
+  replacePatternPlugin
 } from "@rezzou/plugins";
 import type { Operation } from "@rezzou/core";
 
@@ -18,7 +19,8 @@ const kBuiltinOperations = [
   editorConfigPlugin,
   addFilePlugin,
   removeFilePlugin,
-  renameFilePlugin]
+  renameFilePlugin,
+  replacePatternPlugin]
   .flatMap((plugin) => plugin.operations);
 
 export interface OperationInfo {
