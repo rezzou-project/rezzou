@@ -51,6 +51,7 @@ const kDefaults = {
 };
 const mockApiGetOperationDefaults = mock.fn(async() => kDefaults);
 const mockApiAddHistoryEntry = mock.fn(async() => undefined);
+const mockApiCheckBranchConflicts = mock.fn(async() => [] as string[]);
 
 (globalThis as Record<string, unknown>).window = {
   api: {
@@ -61,7 +62,8 @@ const mockApiAddHistoryEntry = mock.fn(async() => undefined);
     applyDiff: mockApiApplyDiff,
     listOperations: mockApiListOperations,
     getOperationDefaults: mockApiGetOperationDefaults,
-    addHistoryEntry: mockApiAddHistoryEntry
+    addHistoryEntry: mockApiAddHistoryEntry,
+    checkBranchConflicts: mockApiCheckBranchConflicts
   }
 };
 
@@ -88,6 +90,7 @@ beforeEach(() => {
   mockApiApplyDiff.mock.resetCalls();
   mockApiGetOperationDefaults.mock.resetCalls();
   mockApiAddHistoryEntry.mock.resetCalls();
+  mockApiCheckBranchConflicts.mock.resetCalls();
 });
 
 describe("authenticate", () => {

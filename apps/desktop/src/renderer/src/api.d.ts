@@ -37,7 +37,8 @@ declare global {
       authenticate(token: string, provider: Provider): Promise<Namespace[]>;
       loadRepos(namespace: string, provider: Provider): Promise<Repo[]>;
       scanRepos(repos: Repo[], operationId: string, inputs: Record<string, unknown>): Promise<RepoDiff[]>;
-      applyDiff(diff: RepoDiff, options: { inputs: Record<string, unknown>; operationId: string; overrides?: OperationOverrides; }): Promise<SubmitResult>;
+      applyDiff(diff: RepoDiff, options: { inputs: Record<string, unknown>; operationId: string; overrides?: OperationOverrides; force?: boolean; }): Promise<SubmitResult>;
+      checkBranchConflicts(repoPaths: string[], branchName: string): Promise<string[]>;
       listOperations(): Promise<{ id: string; name: string; description: string; }[]>;
       getOperationDefaults(operationId: string, inputs: Record<string, unknown>): Promise<OperationDefaults>;
       fetchMembers(namespace: string): Promise<Member[]>;

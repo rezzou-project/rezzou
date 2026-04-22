@@ -97,6 +97,8 @@ export interface SubmitParams {
   prDescription: string;
   reviewers?: string[];
   files: CommitAction[];
+  /** If true, reset the head branch to the base branch before applying changes. */
+  force?: boolean;
 }
 
 export interface SubmitResult {
@@ -121,6 +123,7 @@ export interface ProviderAdapter {
   listRepos(namespace: string): Promise<Repo[]>;
   getFile(repoPath: string, filePath: string, branch: string): Promise<FileContent | null>;
   listTree(repoPath: string, branch: string): Promise<string[]>;
+  branchExists(repoPath: string, branch: string): Promise<boolean>;
   submitChanges(params: SubmitParams): Promise<SubmitResult>;
   listMembers(namespace: string): Promise<Member[]>;
   getRepoStats(repoPath: string): Promise<RepoStats>;

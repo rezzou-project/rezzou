@@ -17,6 +17,7 @@ export abstract class BaseProvider implements ProviderAdapter {
   abstract listRepos(namespace: string): Promise<Repo[]>;
   abstract getFile(repoPath: string, filePath: string, branch: string): Promise<FileContent | null>;
   abstract listTree(repoPath: string, branch: string): Promise<string[]>;
+  abstract branchExists(repoPath: string, branch: string): Promise<boolean>;
   abstract submitChanges(params: SubmitParams): Promise<SubmitResult>;
   abstract listMembers(namespace: string): Promise<Member[]>;
   abstract getRepoStats(repoPath: string): Promise<RepoStats>;

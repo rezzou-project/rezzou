@@ -90,7 +90,22 @@ export class GitLabAdapter extends BaseProvider {
     return results;
   }
 
+  async branchExists(repoPath: string, branch: string): Promise<boolean> {
+    try {
+      await this.#client.Branches.show(repoPath, branch);
+
+      return true;
+    }
+    catch {
+      return false;
+    }
+  }
+
   async submitChanges(params: SubmitParams): Promise<SubmitResult> {
+    if (params.force && await this.branchExists(params.repoPath, params.headBranch)) {
+      await this.#client.Branches.remove(params.repoPath, params.headBranch);
+    }
+
     await this.#client.Commits.create(
       params.repoPath,
       params.headBranch,

@@ -36,9 +36,9 @@ export async function scanRepos<I extends Record<string, unknown>>(
 export async function applyRepoDiff<I extends Record<string, unknown>>(
   adapter: ProviderAdapter,
   diff: RepoDiff,
-  options: { operation: Operation<I>; inputs: I; overrides?: OperationOverrides; }
+  options: { operation: Operation<I>; inputs: I; overrides?: OperationOverrides; force?: boolean; }
 ): Promise<SubmitResult> {
-  const { operation, inputs, overrides } = options;
+  const { operation, inputs, overrides, force } = options;
 
   return adapter.submitChanges({
     repoPath: diff.repo.fullPath,
@@ -54,6 +54,7 @@ export async function applyRepoDiff<I extends Record<string, unknown>>(
         path: patch.path,
         content: patch.content ?? ""
       };
-    })
+    }),
+    force
   });
 }

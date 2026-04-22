@@ -30,9 +30,12 @@ export const applyStatus = {
   Pending: "pending",
   Applying: "applying",
   Done: "done",
-  Error: "error"
+  Error: "error",
+  Skipped: "skipped"
 } as const;
 type ApplyStatus = (typeof applyStatus)[keyof typeof applyStatus];
+
+type BranchConflictStrategy = "skip" | "force" | "suffix";
 
 export interface RepoDiff extends BaseRepoDiff {
   applyStatus: ApplyStatus;
@@ -59,6 +62,16 @@ interface AppState {
   operationOverrides: OperationOverrides;
   applyModalTarget: "single" | "all" | null;
   applyModalRepoPath: string | null;
+  branchConflictModal: {
+    conflictingPaths: string[];
+    applyTarget: "single" | "all";
+    applyRepoPath: string | null;
+  } | null;
+  branchConflictStrategy: {
+    strategy: "force" | "suffix";
+    conflictingPaths: string[];
+    suffix?: string;
+  } | null;
   isApplyingAll: boolean;
   isLoading: boolean;
   error: string | null;
@@ -88,6 +101,8 @@ interface AppActions {
   openApplyModal: (target: "single" | "all", repoPath?: string) => Promise<void>;
   closeApplyModal: () => void;
   confirmApply: () => Promise<void>;
+  closeBranchConflictModal: () => void;
+  resolveBranchConflict: (strategy: BranchConflictStrategy, suffix?: string) => Promise<void>;
   applyDiff: (repoPath: string) => Promise<void>;
   applyAll: () => Promise<void>;
   cancelApplyAll: () => void;
@@ -111,6 +126,8 @@ const kInitialState: AppState = {
   operationOverrides: {},
   applyModalTarget: null,
   applyModalRepoPath: null,
+  branchConflictModal: null,
+  branchConflictStrategy: null,
   isApplyingAll: false,
   isLoading: false,
   error: null,
@@ -307,7 +324,12 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
     openApplyModal: async(target: "single" | "all", repoPath?: string) => {
       const { selectedOperationId, operationInputs } = get();
       const defaults = await window.api.getOperationDefaults(selectedOperationId, operationInputs);
-      set({ applyModalTarget: target, applyModalRepoPath: repoPath ?? null, operationOverrides: defaults });
+      set({
+        applyModalTarget: target,
+        applyModalRepoPath: repoPath ?? null,
+        operationOverrides: defaults,
+        branchConflictStrategy: null
+      });
     },
 
     closeApplyModal: () => {
@@ -315,13 +337,83 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
     },
 
     confirmApply: async() => {
-      const { applyModalTarget, applyModalRepoPath } = get();
+      const { applyModalTarget, applyModalRepoPath, operationOverrides, diffs } = get();
       set({ applyModalTarget: null, applyModalRepoPath: null });
+
+      if (applyModalTarget === null) {
+        return;
+      }
+
+      const branchName = operationOverrides.branchName ?? "";
+      const repoPaths = applyModalTarget === "all"
+        ? diffs.filter((diff) => diff.applyStatus === applyStatus.Pending).map((diff) => diff.repo.fullPath)
+        : [applyModalRepoPath!];
+
+      const conflictingPaths = await window.api.checkBranchConflicts(repoPaths, branchName);
+
+      if (conflictingPaths.length > 0) {
+        set({
+          branchConflictModal: {
+            conflictingPaths,
+            applyTarget: applyModalTarget!,
+            applyRepoPath: applyModalRepoPath
+          }
+        });
+
+        return;
+      }
+
       if (applyModalTarget === "single" && applyModalRepoPath !== null) {
         await get().applyDiff(applyModalRepoPath);
       }
       else if (applyModalTarget === "all") {
         await get().applyAll();
+      }
+    },
+
+    closeBranchConflictModal: () => {
+      set({ branchConflictModal: null });
+    },
+
+    resolveBranchConflict: async(strategy, suffix) => {
+      const { branchConflictModal } = get();
+      if (branchConflictModal === null) {
+        return;
+      }
+
+      const { conflictingPaths, applyTarget, applyRepoPath } = branchConflictModal;
+      set({ branchConflictModal: null });
+
+      if (strategy === "skip") {
+        set((state) => {
+          return {
+            diffs: state.diffs.map((diff) => {
+              if (!conflictingPaths.includes(diff.repo.fullPath)) {
+                return diff;
+              }
+
+              return { ...diff, applyStatus: applyStatus.Skipped };
+            })
+          };
+        });
+      }
+      else {
+        set({ branchConflictStrategy: { strategy, conflictingPaths, suffix } });
+      }
+
+      try {
+        if (applyTarget === "single" && applyRepoPath !== null) {
+          if (strategy === "skip" && conflictingPaths.includes(applyRepoPath)) {
+            return;
+          }
+          await get().applyDiff(applyRepoPath);
+        }
+        else if (applyTarget === "all") {
+          await get().applyAll();
+        }
+      }
+      finally {
+        set({ branchConflictStrategy: null });
       }
     },
 
@@ -343,7 +435,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
     },
 
     applyDiff: async(repoPath: string) => {
-      const { diffs, operationInputs, operationOverrides, selectedOperationId } = get();
+      const { diffs, operationInputs, operationOverrides, selectedOperationId, branchConflictStrategy } = get();
 
       const diffIndex = diffs.findIndex((diff) => diff.repo.fullPath === repoPath);
       if (diffIndex === -1) {
@@ -351,6 +443,17 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
       }
 
       const diff = diffs[diffIndex];
+
+      const isConflicting = branchConflictStrategy?.conflictingPaths.includes(repoPath) ?? false;
+      const force = isConflicting && branchConflictStrategy?.strategy === "force";
+
+      let effectiveOverrides = operationOverrides;
+      if (isConflicting && branchConflictStrategy?.strategy === "suffix") {
+        effectiveOverrides = {
+          ...operationOverrides,
+          branchName: (operationOverrides.branchName ?? "") + (branchConflictStrategy.suffix ?? "-v2")
+        };
+      }
 
       set((state) => {
         const updatedDiffs = [...state.diffs];
@@ -362,7 +465,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
       try {
         const result: SubmitResult = await window.api.applyDiff(
           diff,
-          { inputs: operationInputs, operationId: selectedOperationId, overrides: operationOverrides }
+          { inputs: operationInputs, operationId: selectedOperationId, overrides: effectiveOverrides, force }
         );
 
         set((state) => {

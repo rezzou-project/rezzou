@@ -12,6 +12,7 @@ import {
   handleLoadRepos,
   handleScanRepos,
   handleApplyDiff,
+  handleCheckBranchConflicts,
   handleGetOperationDefaults,
   handleFetchMembers,
   handleGetRepoStats,
@@ -77,6 +78,11 @@ interface ReloadPluginPayload {
 interface FilterReposPayload {
   repos: Repo[];
   filterIds: string[];
+}
+
+interface CheckBranchConflictsPayload {
+  repoPaths: string[];
+  branchName: string;
 }
 
 interface AddHistoryEntryPayload {
@@ -326,12 +332,20 @@ app.whenReady().then(async() => {
   });
 
   ipcMain.handle("engine:applyDiff", async(_event, payload: ApplyDiffOptions) => {
-    const { diff, inputs, operationId, overrides } = payload;
     if (currentAdapter === null) {
       throw new Error("Not connected");
     }
 
-    return handleApplyDiff(currentAdapter, { diff, inputs, operationId, overrides }).catch(toError);
+    return handleApplyDiff(currentAdapter, payload).catch(toError);
+  });
+
+  ipcMain.handle("engine:checkBranchConflicts", async(_event, payload: CheckBranchConflictsPayload): Promise<string[]> => {
+    const { repoPaths, branchName } = payload;
+    if (currentAdapter === null) {
+      throw new Error("Not connected");
+    }
+
+    return handleCheckBranchConflicts(currentAdapter, { repoPaths, branchName }).catch(toError);
   });
 
   ipcMain.handle("engine:listOperations", (): OperationInfo[] => listOperations());

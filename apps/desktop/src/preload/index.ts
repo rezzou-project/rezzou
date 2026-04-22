@@ -72,8 +72,13 @@ contextBridge.exposeInMainWorld("api", {
 
   applyDiff: (
     diff: RepoDiff,
-    options: { inputs: Record<string, unknown>; operationId: string; overrides?: OperationOverrides; }
+    options: { inputs: Record<string, unknown>; operationId: string; overrides?: OperationOverrides; force?: boolean; }
   ): Promise<SubmitResult> => ipcRenderer.invoke("engine:applyDiff", { diff, ...options }),
+
+  checkBranchConflicts: (
+    repoPaths: string[],
+    branchName: string
+  ): Promise<string[]> => ipcRenderer.invoke("engine:checkBranchConflicts", { repoPaths, branchName }),
 
   listOperations: () => ipcRenderer.invoke("engine:listOperations"),
 
