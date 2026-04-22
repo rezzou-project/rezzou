@@ -123,6 +123,10 @@ function DiffCard({ diff }: { diff: RepoDiff; }) {
           <span className="text-xs text-yellow-400">Applying...</span>
         )}
 
+        {diff.applyStatus === "skipped" && (
+          <span className="text-xs text-gray-500">Skipped</span>
+        )}
+
         {diff.applyStatus === "done" && diff.prUrl !== undefined && (
           <a
             href={diff.prUrl}
@@ -361,6 +365,115 @@ function ApplyModal() {
   );
 }
 
+function BranchConflictModal() {
+  const { branchConflictModal, operationOverrides, closeBranchConflictModal, resolveBranchConflict } = useAppStore();
+  const [strategy, setStrategy] = useState<"skip" | "force" | "suffix">("skip");
+  const [suffix, setSuffix] = useState("-v2");
+
+  useEffect(() => {
+    if (branchConflictModal !== null) {
+      setStrategy("skip");
+      setSuffix("-v2");
+    }
+  }, [branchConflictModal]);
+
+  if (branchConflictModal === null) {
+    return null;
+  }
+
+  const { conflictingPaths } = branchConflictModal;
+  const branchName = operationOverrides.branchName ?? "";
+  const repoWord = conflictingPaths.length === 1 ? "repository" : "repositories";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-xl border border-gray-800 bg-gray-950 p-6 shadow-2xl">
+        <h3 className="mb-1 text-base font-semibold">Branch conflict detected</h3>
+        <p className="mb-5 text-xs text-gray-500">
+          Branch <span className="font-mono text-gray-300">{branchName}</span> already exists
+          in {conflictingPaths.length} {repoWord}.
+        </p>
+
+        <div className="flex flex-col gap-2">
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-800 p-3 hover:border-gray-700">
+            <input
+              type="radio"
+              name="conflict-strategy"
+              value="skip"
+              checked={strategy === "skip"}
+              onChange={() => setStrategy("skip")}
+              className="mt-0.5"
+            />
+            <div>
+              <p className="text-sm font-medium">Skip</p>
+              <p className="text-xs text-gray-500">
+                {conflictingPaths.length} {conflictingPaths.length === 1 ? "repo" : "repos"} will be skipped
+              </p>
+            </div>
+          </label>
+
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-800 p-3 hover:border-gray-700">
+            <input
+              type="radio"
+              name="conflict-strategy"
+              value="force"
+              checked={strategy === "force"}
+              onChange={() => setStrategy("force")}
+              className="mt-0.5"
+            />
+            <div>
+              <p className="text-sm font-medium">Force push</p>
+              <p className="text-xs text-gray-500">Reset existing branches to base and apply</p>
+            </div>
+          </label>
+
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-800 p-3 hover:border-gray-700">
+            <input
+              type="radio"
+              name="conflict-strategy"
+              value="suffix"
+              checked={strategy === "suffix"}
+              onChange={() => setStrategy("suffix")}
+              className="mt-0.5"
+            />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium">Rename branch</p>
+              <p className="mb-2 text-xs text-gray-500">Use a different branch name for conflicting repos</p>
+              {strategy === "suffix" && (
+                <div className="flex items-center gap-2">
+                  <span className="min-w-0 truncate font-mono text-xs text-gray-400">{branchName}</span>
+                  <input
+                    type="text"
+                    value={suffix}
+                    onChange={(event) => setSuffix(event.target.value)}
+                    className="w-20 shrink-0 rounded border border-gray-700 bg-gray-800 px-2 py-1 text-xs text-gray-200 focus:border-gray-500 focus:outline-none"
+                    placeholder="-v2"
+                  />
+                </div>
+              )}
+            </div>
+          </label>
+        </div>
+
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            onClick={closeBranchConflictModal}
+            className="rounded-lg border border-gray-700 px-4 py-1.5 text-sm font-medium transition-colors hover:border-gray-500"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => void resolveBranchConflict(strategy, strategy === "suffix" ? suffix : void 0)}
+            className="rounded-lg bg-green-700 px-4 py-1.5 text-sm font-medium transition-colors hover:bg-green-600"
+          >
+            Confirm
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface OperationInfo {
   id: string;
   name: string;
@@ -398,6 +511,7 @@ export function DiffReview() {
   return (
     <div>
       <ApplyModal />
+      <BranchConflictModal />
 
       <div className="mb-6 flex items-center justify-between">
         <div>

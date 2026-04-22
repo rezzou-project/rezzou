@@ -77,15 +77,38 @@ export interface ApplyDiffOptions {
   inputs: Record<string, unknown>;
   operationId: string;
   overrides?: OperationOverrides;
+  force?: boolean;
 }
 
 export async function handleApplyDiff(
   adapter: ProviderAdapter,
   options: ApplyDiffOptions
 ): Promise<SubmitResult> {
-  const { diff, inputs, operationId, overrides } = options;
+  const { diff, inputs, operationId, overrides, force } = options;
 
-  return applyRepoDiff(adapter, diff, { operation: getOperation(operationId), inputs, overrides });
+  return applyRepoDiff(adapter, diff, { operation: getOperation(operationId), inputs, overrides, force });
+}
+
+export interface CheckBranchConflictsOptions {
+  repoPaths: string[];
+  branchName: string;
+}
+
+export async function handleCheckBranchConflicts(
+  adapter: ProviderAdapter,
+  options: CheckBranchConflictsOptions
+): Promise<string[]> {
+  const { repoPaths, branchName } = options;
+
+  const results = await Promise.all(
+    repoPaths.map(async(repoPath) => {
+      const exists = await adapter.branchExists(repoPath, branchName);
+
+      return exists ? repoPath : null;
+    })
+  );
+
+  return results.filter((repoPath): repoPath is string => repoPath !== null);
 }
 
 export interface GetOperationDefaultsOptions {

@@ -103,6 +103,19 @@ export class GitHubAdapter extends BaseProvider {
     }
   }
 
+  async branchExists(repoPath: string, branch: string): Promise<boolean> {
+    const [owner, repo] = repoPath.split("/");
+
+    try {
+      await this.#client.git.getRef({ owner, repo, ref: `heads/${branch}` });
+
+      return true;
+    }
+    catch {
+      return false;
+    }
+  }
+
   async submitChanges(params: SubmitParams): Promise<SubmitResult> {
     const [owner, repo] = params.repoPath.split("/");
 
@@ -112,12 +125,33 @@ export class GitHubAdapter extends BaseProvider {
       branch: params.baseBranch
     });
 
-    await this.#client.git.createRef({
-      owner,
-      repo,
-      ref: `refs/heads/${params.headBranch}`,
-      sha: baseBranch.commit.sha
-    });
+    if (params.force) {
+      try {
+        await this.#client.git.updateRef({
+          owner,
+          repo,
+          ref: `heads/${params.headBranch}`,
+          sha: baseBranch.commit.sha,
+          force: true
+        });
+      }
+      catch {
+        await this.#client.git.createRef({
+          owner,
+          repo,
+          ref: `refs/heads/${params.headBranch}`,
+          sha: baseBranch.commit.sha
+        });
+      }
+    }
+    else {
+      await this.#client.git.createRef({
+        owner,
+        repo,
+        ref: `refs/heads/${params.headBranch}`,
+        sha: baseBranch.commit.sha
+      });
+    }
 
     await this.#client.request("POST /graphql", {
       query: kCreateCommitMutation,

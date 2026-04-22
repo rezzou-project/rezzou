@@ -201,7 +201,8 @@ describe("UT applyRepoDiff", () => {
       prTitle: "chore: test",
       prDescription: "test description",
       reviewers: [],
-      files: [{ action: "update", path: "LICENSE", content: "MIT License\nCopyright 2020-2026" }]
+      files: [{ action: "update", path: "LICENSE", content: "MIT License\nCopyright 2020-2026" }],
+      force: undefined
     });
     assert.deepEqual(result, kSubmitResult);
   });
