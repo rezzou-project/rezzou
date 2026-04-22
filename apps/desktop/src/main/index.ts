@@ -26,6 +26,7 @@ import { listOperations, registry, type OperationInfo } from "./operation-regist
 import { filterRegistry } from "./filter-registry.ts";
 import { loadPlugin, unregisterPluginByPath } from "./plugin-loader.ts";
 import { readPluginPaths, addPluginPath, removePluginPath, scanPluginsDir } from "./plugins-store.ts";
+import { readHistory, addHistoryEntry, type HistoryEntry } from "./history-store.ts";
 
 interface AuthenticateOptions {
   token: string;
@@ -76,6 +77,10 @@ interface ReloadPluginPayload {
 interface FilterReposPayload {
   repos: Repo[];
   filterIds: string[];
+}
+
+interface AddHistoryEntryPayload {
+  entry: HistoryEntry;
 }
 
 // CONSTANTS
@@ -433,6 +438,13 @@ app.whenReady().then(async() => {
     }
 
     return handleFetchMembers(currentAdapter, namespace).catch(toError);
+  });
+
+  ipcMain.handle("history:list", (): HistoryEntry[] => readHistory());
+
+  ipcMain.handle("history:add", (_event, payload: AddHistoryEntryPayload): void => {
+    const { entry } = payload;
+    addHistoryEntry(entry);
   });
 
   ipcMain.handle("engine:getRepoStats", async(_event, payload: GetRepoStatsPayload) => {

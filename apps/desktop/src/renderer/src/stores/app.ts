@@ -16,7 +16,7 @@ const kApplyConcurrency = 4;
 
 let applyAllAbortController: AbortController | null = null;
 
-type Step = "connect" | "home" | "repos" | "pick-operation" | "diffs" | "results" | "plugins";
+type Step = "connect" | "home" | "repos" | "pick-operation" | "diffs" | "results" | "plugins" | "history";
 
 function ipcErrorMessage(error: unknown, fallback: string): string {
   if (!(error instanceof Error)) {
@@ -62,6 +62,7 @@ interface AppState {
   isApplyingAll: boolean;
   isLoading: boolean;
   error: string | null;
+  historyEntries: HistoryEntry[];
 }
 
 interface AppActions {
@@ -70,6 +71,7 @@ interface AppActions {
   receiveOAuthResult: (namespaces: Namespace[], provider: Provider) => void;
   goHome: () => void;
   goToPlugins: () => void;
+  goToHistory: () => Promise<void>;
   loadRepos: (namespace: Namespace) => Promise<void>;
   loadAllRepoStats: () => Promise<void>;
   toggleRepo: (id: string) => void;
@@ -111,7 +113,8 @@ const kInitialState: AppState = {
   applyModalRepoPath: null,
   isApplyingAll: false,
   isLoading: false,
-  error: null
+  error: null,
+  historyEntries: []
 };
 
 export const useAppStore = create<AppState & AppActions>((set, get) => {
@@ -168,6 +171,11 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
 
     goToPlugins: () => {
       set({ step: "plugins" });
+    },
+
+    goToHistory: async() => {
+      const entries = await window.api.listHistory();
+      set({ historyEntries: entries, step: "history" });
     },
 
     loadRepos: async(namespace: Namespace) => {
@@ -379,7 +387,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
     },
 
     applyAll: async() => {
-      const { diffs } = get();
+      const { diffs, selectedOperationId, selectedNamespace } = get();
       const pendingDiffs = diffs.filter((diff) => diff.applyStatus === applyStatus.Pending);
 
       applyAllAbortController = new AbortController();
@@ -397,6 +405,33 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
       }
       finally {
         applyAllAbortController = null;
+
+        const completedDiffs = get().diffs;
+        const results: HistoryEntryResult[] = completedDiffs.flatMap((diff) => {
+          if (diff.applyStatus !== applyStatus.Done && diff.applyStatus !== applyStatus.Error) {
+            return [];
+          }
+
+          return [{
+            repoName: diff.repo.name,
+            repoFullPath: diff.repo.fullPath,
+            status: diff.applyStatus === applyStatus.Done ? "done" as const : "error" as const,
+            prUrl: diff.prUrl,
+            error: diff.error
+          }];
+        });
+
+        if (results.length > 0) {
+          const entry: HistoryEntry = {
+            id: crypto.randomUUID(),
+            timestamp: Date.now(),
+            operationId: selectedOperationId,
+            namespace: selectedNamespace?.displayName ?? "",
+            results
+          };
+          await window.api.addHistoryEntry(entry);
+        }
+
         set({ isApplyingAll: false, step: "results" });
       }
     },

@@ -50,6 +50,7 @@ const kDefaults = {
   prDescription: "Automated update"
 };
 const mockApiGetOperationDefaults = mock.fn(async() => kDefaults);
+const mockApiAddHistoryEntry = mock.fn(async() => undefined);
 
 (globalThis as Record<string, unknown>).window = {
   api: {
@@ -59,7 +60,8 @@ const mockApiGetOperationDefaults = mock.fn(async() => kDefaults);
     scanRepos: mockApiScanRepos,
     applyDiff: mockApiApplyDiff,
     listOperations: mockApiListOperations,
-    getOperationDefaults: mockApiGetOperationDefaults
+    getOperationDefaults: mockApiGetOperationDefaults,
+    addHistoryEntry: mockApiAddHistoryEntry
   }
 };
 
@@ -85,6 +87,7 @@ beforeEach(() => {
   mockApiListOperations.mock.resetCalls();
   mockApiApplyDiff.mock.resetCalls();
   mockApiGetOperationDefaults.mock.resetCalls();
+  mockApiAddHistoryEntry.mock.resetCalls();
 });
 
 describe("authenticate", () => {
