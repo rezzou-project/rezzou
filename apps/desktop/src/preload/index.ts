@@ -24,6 +24,22 @@ interface FilterInfo {
   description?: string;
 }
 
+interface HistoryEntryResult {
+  repoName: string;
+  repoFullPath: string;
+  status: "done" | "error";
+  prUrl?: string;
+  error?: string;
+}
+
+interface HistoryEntry {
+  id: string;
+  timestamp: number;
+  operationId: string;
+  namespace: string;
+  results: HistoryEntryResult[];
+}
+
 interface LoadedPluginInfo {
   id: string;
   name: string;
@@ -151,5 +167,9 @@ contextBridge.exposeInMainWorld("api", {
     ipcRenderer.on("registry:filtersChanged", listener);
 
     return () => ipcRenderer.removeListener("registry:filtersChanged", listener);
-  }
+  },
+
+  listHistory: (): Promise<HistoryEntry[]> => ipcRenderer.invoke("history:list"),
+
+  addHistoryEntry: (entry: HistoryEntry): Promise<void> => ipcRenderer.invoke("history:add", { entry })
 });

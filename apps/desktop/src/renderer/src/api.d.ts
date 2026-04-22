@@ -15,6 +15,22 @@ interface FilterInfo {
 }
 
 declare global {
+  interface HistoryEntryResult {
+    repoName: string;
+    repoFullPath: string;
+    status: "done" | "error";
+    prUrl?: string;
+    error?: string;
+  }
+
+  interface HistoryEntry {
+    id: string;
+    timestamp: number;
+    operationId: string;
+    namespace: string;
+    results: HistoryEntryResult[];
+  }
+
   interface Window {
     api: {
       autoLogin(): Promise<{ namespaces: Namespace[]; provider: Provider; }[] | null>;
@@ -42,6 +58,8 @@ declare global {
       listFilters(): Promise<FilterInfo[]>;
       filterRepos(repos: Repo[], filterIds: string[]): Promise<string[]>;
       onFiltersChanged(callback: (filters: FilterInfo[]) => void): () => void;
+      listHistory(): Promise<HistoryEntry[]>;
+      addHistoryEntry(entry: HistoryEntry): Promise<void>;
     };
   }
 }
