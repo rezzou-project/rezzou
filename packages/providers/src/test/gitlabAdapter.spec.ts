@@ -109,6 +109,21 @@ describe("GitLabAdapter", () => {
         { minAccessLevel: 20, perPage: 100 }
       ]);
     });
+
+    it("should return all groups when more than 100 exist", async() => {
+      const manyGroups = Array.from({ length: 150 }, (_, i) => {
+        return { id: i, full_path: `group-${i}`, name: `Group ${i}` };
+      });
+      mockShowCurrentUser.mock.mockImplementationOnce(async() => {
+        return { id: 1, username: "john", name: "John" };
+      });
+      mockGroupsAll.mock.mockImplementationOnce(async() => manyGroups);
+
+      const adapter = new GitLabAdapter(kToken);
+      const result = await adapter.listNamespaces();
+
+      assert.equal(result.length, 151);
+    });
   });
 
   describe("listRepos", () => {
@@ -165,6 +180,24 @@ describe("GitLabAdapter", () => {
         "my-org",
         { perPage: 100, archived: false }
       ]);
+    });
+
+    it("should return all repos when more than 100 exist", async() => {
+      const manyProjects = Array.from({ length: 150 }, (_, i) => {
+        return {
+          id: i,
+          name: `repo-${i}`,
+          path_with_namespace: `ns/repo-${i}`,
+          default_branch: "main",
+          web_url: `https://gitlab.com/ns/repo-${i}`
+        };
+      });
+      mockAllProjects.mock.mockImplementationOnce(async() => manyProjects);
+
+      const adapter = new GitLabAdapter(kToken);
+      const result = await adapter.listRepos("ns");
+
+      assert.equal(result.length, 150);
     });
   });
 
@@ -364,6 +397,18 @@ describe("GitLabAdapter", () => {
 
       assert.equal(mockGroupMembersAll.mock.callCount(), 1);
       assert.deepEqual(mockGroupMembersAll.mock.calls[0].arguments, ["my-group"]);
+    });
+
+    it("should return all members when more than 100 exist", async() => {
+      const manyMembers = Array.from({ length: 150 }, (_, i) => {
+        return { username: `user-${i}`, avatar_url: undefined };
+      });
+      mockGroupMembersAll.mock.mockImplementationOnce(async() => manyMembers);
+
+      const adapter = new GitLabAdapter(kToken);
+      const result = await adapter.listMembers("my-group");
+
+      assert.equal(result.length, 150);
     });
   });
 

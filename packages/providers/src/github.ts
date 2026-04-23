@@ -25,9 +25,9 @@ export class GitHubAdapter extends BaseProvider {
   }
 
   async listNamespaces(): Promise<Namespace[]> {
-    const [{ data: user }, { data: orgs }] = await Promise.all([
+    const [{ data: user }, orgs] = await Promise.all([
       this.#client.users.getAuthenticated(),
-      this.#client.orgs.listForAuthenticatedUser({ per_page: 100 })
+      this.#client.paginate(this.#client.orgs.listForAuthenticatedUser, { per_page: 100 })
     ]);
 
     const namespaces: Namespace[] = [
@@ -60,8 +60,8 @@ export class GitHubAdapter extends BaseProvider {
     const namespaceType = this.#namespaces.get(namespace) ?? "org";
 
     const data = namespaceType === "org"
-      ? (await this.#client.repos.listForOrg({ org: namespace, per_page: 100, type: "all" })).data
-      : (await this.#client.repos.listForUser({ username: namespace, per_page: 100, type: "all" })).data;
+      ? await this.#client.paginate(this.#client.repos.listForOrg, { org: namespace, per_page: 100, type: "all" })
+      : await this.#client.paginate(this.#client.repos.listForUser, { username: namespace, per_page: 100, type: "all" });
 
     return data.flatMap((repo) => {
       if (repo.archived) {
@@ -239,7 +239,7 @@ export class GitHubAdapter extends BaseProvider {
       return [];
     }
 
-    const { data } = await this.#client.orgs.listMembers({ org: namespace, per_page: 100 });
+    const data = await this.#client.paginate(this.#client.orgs.listMembers, { org: namespace, per_page: 100 });
 
     return data.map((user) => {
       return { username: user.login, avatarUrl: user.avatar_url };
