@@ -11,12 +11,22 @@ import {
   type RepoFilter,
   type RepoContext,
   type Patch,
-  type InputField
+  type InputField,
+  type ProviderAdapter,
+  type ProviderDescriptor,
+  type Namespace,
+  type Repo,
+  type FileContent,
+  type SubmitParams,
+  type SubmitResult,
+  type Member,
+  type RepoStats
 } from "@rezzou/sdk";
 
 // Import Internal Dependencies
 import { registry as operationRegistry } from "./operation-registry.ts";
 import { filterRegistry } from "./filter-registry.ts";
+import { providerRegistry } from "./provider-registry.ts";
 
 type OperationStringFn = "branchName" | "commitMessage" | "prTitle" | "prDescription";
 
@@ -32,17 +42,89 @@ interface SerializedOperation {
   inputs?: InputField[];
 }
 
+interface SerializedProviderDescriptor {
+  provider: string;
+  name: string;
+}
+
 interface SerializedPlugin {
   id: string;
   name: string;
   version: string;
   operations: SerializedOperation[];
   filters: Array<{ id: string; name: string; description?: string; }>;
+  providers: SerializedProviderDescriptor[];
 }
 
 interface LoadedPluginEntry {
   operationIds: string[];
   filterIds: string[];
+  providerIds: string[];
+}
+
+interface ProxyProviderAdapterOptions {
+  provider: string;
+  adapterKey: string;
+  child: cp.ChildProcess;
+  pendingCalls: Map<string, CallPending>;
+  getCallId: () => string;
+}
+
+class ProxyProviderAdapter implements ProviderAdapter {
+  readonly provider: string;
+  readonly #adapterKey: string;
+  readonly #child: cp.ChildProcess;
+  readonly #pendingCalls: Map<string, CallPending>;
+  readonly #getCallId: () => string;
+
+  constructor(options: ProxyProviderAdapterOptions) {
+    this.provider = options.provider;
+    this.#adapterKey = options.adapterKey;
+    this.#child = options.child;
+    this.#pendingCalls = options.pendingCalls;
+    this.#getCallId = options.getCallId;
+  }
+
+  #callMethod(method: string, args: unknown[]): Promise<unknown> {
+    const callId = this.#getCallId();
+    const { promise, resolve, reject } = Promise.withResolvers<unknown>();
+    this.#pendingCalls.set(callId, { resolve, reject });
+    this.#child.send({ type: "call-adapter", callId, adapterKey: this.#adapterKey, method, args });
+
+    return promise;
+  }
+
+  listNamespaces(): Promise<Namespace[]> {
+    return this.#callMethod("listNamespaces", []) as Promise<Namespace[]>;
+  }
+
+  listRepos(namespace: string): Promise<Repo[]> {
+    return this.#callMethod("listRepos", [namespace]) as Promise<Repo[]>;
+  }
+
+  getFile(repoPath: string, filePath: string, branch: string): Promise<FileContent | null> {
+    return this.#callMethod("getFile", [repoPath, filePath, branch]) as Promise<FileContent | null>;
+  }
+
+  listTree(repoPath: string, branch: string): Promise<string[]> {
+    return this.#callMethod("listTree", [repoPath, branch]) as Promise<string[]>;
+  }
+
+  branchExists(repoPath: string, branch: string): Promise<boolean> {
+    return this.#callMethod("branchExists", [repoPath, branch]) as Promise<boolean>;
+  }
+
+  submitChanges(params: SubmitParams): Promise<SubmitResult> {
+    return this.#callMethod("submitChanges", [params]) as Promise<SubmitResult>;
+  }
+
+  listMembers(namespace: string): Promise<Member[]> {
+    return this.#callMethod("listMembers", [namespace]) as Promise<Member[]>;
+  }
+
+  getRepoStats(repoPath: string): Promise<RepoStats> {
+    return this.#callMethod("getRepoStats", [repoPath]) as Promise<RepoStats>;
+  }
 }
 
 const loadedPlugins = new Map<string, LoadedPluginEntry>();
@@ -50,6 +132,7 @@ const loadedPlugins = new Map<string, LoadedPluginEntry>();
 function registerPlugin(plugin: Plugin, filePath: string): void {
   const operationIds: string[] = [];
   const filterIds: string[] = [];
+  const providerIds: string[] = [];
 
   for (const operation of plugin.operations) {
     operationRegistry.register(operation);
@@ -59,8 +142,12 @@ function registerPlugin(plugin: Plugin, filePath: string): void {
     filterRegistry.register(filter);
     filterIds.push(filter.id);
   }
+  for (const descriptor of plugin.providers ?? []) {
+    providerRegistry.register(descriptor);
+    providerIds.push(descriptor.provider);
+  }
 
-  loadedPlugins.set(filePath, { operationIds, filterIds });
+  loadedPlugins.set(filePath, { operationIds, filterIds, providerIds });
 }
 
 export function unregisterPluginByPath(filePath: string): void {
@@ -74,6 +161,9 @@ export function unregisterPluginByPath(filePath: string): void {
   }
   for (const id of entry.filterIds) {
     filterRegistry.unregister(id);
+  }
+  for (const id of entry.providerIds) {
+    providerRegistry.unregister(id);
   }
   loadedPlugins.delete(filePath);
 }
@@ -229,6 +319,31 @@ async function loadTsPlugin(filePath: string): Promise<Plugin> {
     };
   }
 
+  function makeProviderDescriptor(meta: SerializedProviderDescriptor): ProviderDescriptor {
+    return {
+      provider: meta.provider,
+      name: meta.name,
+      async create(token: string): Promise<ProviderAdapter> {
+        const callId = `provider-create-${callIdCounter++}`;
+        const { promise, resolve, reject } = Promise.withResolvers<string>();
+        pendingCalls.set(callId, {
+          resolve: (value) => resolve(value as string),
+          reject
+        });
+        child.send({ type: "create-provider", callId, provider: meta.provider, token });
+        const adapterKey = await promise;
+
+        return new ProxyProviderAdapter({
+          provider: meta.provider,
+          adapterKey,
+          child,
+          pendingCalls,
+          getCallId: () => `adapter-call-${callIdCounter++}`
+        });
+      }
+    };
+  }
+
   const operations: Operation[] = serialized.operations.map((opMeta) => {
     return {
       id: opMeta.id,
@@ -252,12 +367,15 @@ async function loadTsPlugin(filePath: string): Promise<Plugin> {
     };
   });
 
+  const providers: ProviderDescriptor[] = (serialized.providers ?? []).map(makeProviderDescriptor);
+
   const plugin: Plugin = {
     id: serialized.id,
     name: serialized.name,
     version: serialized.version,
     operations,
-    filters: filters.length > 0 ? filters : undefined
+    filters: filters.length > 0 ? filters : undefined,
+    providers: providers.length > 0 ? providers : undefined
   };
 
   registerPlugin(plugin, filePath);

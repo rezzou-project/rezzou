@@ -1,5 +1,5 @@
 // Import Third-party Dependencies
-import type { Operation, RepoFilter, ProviderAdapter } from "@rezzou/core";
+import type { Operation, RepoFilter, ProviderDescriptor } from "@rezzou/core";
 
 export interface PluginContributions {
   translations?: Record<string, Record<string, string>>;
@@ -11,6 +11,6 @@ export interface Plugin {
   readonly version: string;
   readonly operations: Operation[];
   readonly filters?: RepoFilter[];
-  readonly providers?: ProviderAdapter[];
+  readonly providers?: ProviderDescriptor[];
   readonly contributions?: PluginContributions;
 }

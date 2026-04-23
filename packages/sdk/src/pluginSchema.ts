@@ -29,14 +29,10 @@ const kRepoFilterSchema = z.looseObject({
   test: kFunctionSchema
 });
 
-const kProviderAdapterSchema = z.looseObject({
+const kProviderDescriptorSchema = z.looseObject({
   provider: z.string(),
-  listNamespaces: kFunctionSchema,
-  listRepos: kFunctionSchema,
-  getFile: kFunctionSchema,
-  listTree: kFunctionSchema,
-  submitChanges: kFunctionSchema,
-  listMembers: kFunctionSchema
+  name: z.string(),
+  create: kFunctionSchema
 });
 
 const kPluginContributionsSchema = z.looseObject({
@@ -49,7 +45,7 @@ export const pluginSchema = z.object({
   version: z.string(),
   operations: z.array(kOperationSchema),
   filters: z.array(kRepoFilterSchema).optional(),
-  providers: z.array(kProviderAdapterSchema).optional(),
+  providers: z.array(kProviderDescriptorSchema).optional(),
   contributions: kPluginContributionsSchema.optional()
 });
 

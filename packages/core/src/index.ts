@@ -12,6 +12,7 @@ export type {
   SubmitParams,
   SubmitResult,
   ProviderAdapter,
+  ProviderDescriptor,
   Member,
   RepoStats,
   Operation,

@@ -10,7 +10,6 @@ import {
   type Repo,
   type RepoDiff,
   type ProviderAdapter,
-  type Provider,
   type Namespace
 } from "@rezzou/core";
 
@@ -32,6 +31,7 @@ import {
 } from "./handlers.ts";
 import { listOperations, registry } from "./operation-registry.ts";
 import { filterRegistry } from "./filter-registry.ts";
+import { providerRegistry } from "./provider-registry.ts";
 import { loadPlugin, unregisterPluginByPath } from "./plugin-loader.ts";
 import { readPluginPaths, addPluginPath, removePluginPath, scanPluginsDir } from "./plugins-store.ts";
 import { readHistory, recordRun } from "./history-store.ts";
@@ -51,14 +51,15 @@ import {
   type ReloadPluginPayload,
   type FilterReposPayload,
   type CheckBranchConflictsPayload,
-  type RecordRunPayload
+  type RecordRunPayload,
+  type ProviderInfo
 } from "../shared/ipc-channels.ts";
 
 // CONSTANTS
 const kGitHubClientId = import.meta.env.MAIN_VITE_GITHUB_CLIENT_ID as string;
 const kGitLabClientId = import.meta.env.MAIN_VITE_GITLAB_CLIENT_ID as string;
 
-const adapters = new Map<Provider, ProviderAdapter>();
+const adapters = new Map<string, ProviderAdapter>();
 let mainWindow: BrowserWindow | null = null;
 let pendingGitLabVerifier: string | null = null;
 let githubDeviceAbortController: AbortController | null = null;
@@ -97,7 +98,7 @@ function createWindow(): void {
   });
 }
 
-function getAdapter(provider: Provider): ProviderAdapter {
+function getAdapter(provider: string): ProviderAdapter {
   const adapter = adapters.get(provider);
   if (!adapter) {
     throw new Error(`Not connected to ${provider}`);
@@ -367,6 +368,8 @@ app.whenReady().then(async() => {
     recordRun(payload);
   });
 
+  ipcMain.handle(IpcChannels.ProviderList, (): ProviderInfo[] => providerRegistry.list());
+
   ipcMain.handle(IpcChannels.EngineGetRepoStats, async(_event, payload: GetRepoStatsPayload) => {
     const { repoPath, provider } = payload;
 
@@ -422,6 +425,10 @@ app.whenReady().then(async() => {
 
   filterRegistry.on("change", function onFilterRegistryChange() {
     mainWindow?.webContents.send(IpcChannels.RegistryFiltersChanged, filterRegistry.list());
+  });
+
+  providerRegistry.on("change", function onProviderRegistryChange() {
+    mainWindow?.webContents.send(IpcChannels.RegistryProvidersChanged, providerRegistry.list());
   });
 
   app.on("activate", () => {

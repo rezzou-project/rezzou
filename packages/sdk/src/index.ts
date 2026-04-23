@@ -13,9 +13,12 @@ export type {
   InputField,
   CommitAction,
   Member,
+  RepoStats,
   RepoDiff,
   SubmitParams,
-  SubmitResult
+  SubmitResult,
+  ProviderAdapter,
+  ProviderDescriptor
 } from "@rezzou/core";
 export type { Plugin, PluginContributions } from "./types.ts";
 export { defineOperation } from "./defineOperation.ts";
