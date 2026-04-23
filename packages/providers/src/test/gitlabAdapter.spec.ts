@@ -152,7 +152,7 @@ describe("GitLabAdapter", () => {
       ]);
     });
 
-    it("should default defaultBranch to main when project has no default_branch", async() => {
+    it("should skip repos with no default_branch", async() => {
       mockAllProjects.mock.mockImplementation(async() => [
         {
           id: 1,
@@ -164,9 +164,9 @@ describe("GitLabAdapter", () => {
       ]);
 
       const adapter = new GitLabAdapter(kToken);
-      const [repo] = await adapter.listRepos("ns");
+      const result = await adapter.listRepos("ns");
 
-      assert.equal(repo.defaultBranch, "main");
+      assert.equal(result.length, 0);
     });
 
     it("should call allProjects with namespace and pagination options", async() => {

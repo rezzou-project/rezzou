@@ -68,11 +68,17 @@ export class GitHubAdapter extends BaseProvider {
         return [];
       }
 
+      if (!repo.default_branch) {
+        console.warn(`[rezzou] skipping repo ${repo.full_name}: no default branch`);
+
+        return [];
+      }
+
       return {
         id: String(repo.id),
         name: repo.name,
         fullPath: repo.full_name,
-        defaultBranch: String(repo.default_branch ?? "main"),
+        defaultBranch: repo.default_branch,
         url: repo.html_url
       };
     });

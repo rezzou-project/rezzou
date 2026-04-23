@@ -48,12 +48,18 @@ export class GitLabAdapter extends BaseProvider {
       archived: false
     });
 
-    return projects.map((project) => {
+    return projects.flatMap((project) => {
+      if (!project.default_branch) {
+        console.warn(`[rezzou] skipping repo ${project.path_with_namespace}: no default branch`);
+
+        return [];
+      }
+
       return {
         id: String(project.id),
         name: project.name,
         fullPath: String(project.path_with_namespace),
-        defaultBranch: String(project.default_branch ?? "main"),
+        defaultBranch: String(project.default_branch),
         url: String(project.web_url)
       };
     });

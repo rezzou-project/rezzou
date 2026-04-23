@@ -264,6 +264,23 @@ describe("GitHubAdapter", () => {
       assert.equal(result[0].name, "active");
     });
 
+    it("should skip repos with no default_branch", async() => {
+      mockListForOrg.mock.mockImplementation(async() => {
+        return {
+          data: [
+            { id: 1, name: "has-branch", full_name: "org/has-branch", default_branch: "main", html_url: "", archived: false },
+            { id: 2, name: "no-branch", full_name: "org/no-branch", default_branch: null, html_url: "", archived: false }
+          ]
+        };
+      });
+
+      const adapter = await setupOrgAdapter("org");
+      const result = await adapter.listRepos("org");
+
+      assert.equal(result.length, 1);
+      assert.equal(result[0].name, "has-branch");
+    });
+
     it("should call listForUser when namespace type is user", async() => {
       mockListForUser.mock.mockImplementation(async() => {
         return {
