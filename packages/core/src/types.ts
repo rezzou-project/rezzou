@@ -63,10 +63,10 @@ export interface Operation<Inputs extends Record<string, unknown> = Record<strin
   readonly description: string;
   readonly inputs?: readonly InputField[];
   apply(ctx: RepoContext, inputs: Inputs): Promise<Patch[] | null>;
-  branchName(inputs: Inputs): string;
-  commitMessage(inputs: Inputs): string;
-  prTitle(inputs: Inputs): string;
-  prDescription(inputs: Inputs): string;
+  branchName(inputs: Inputs): string | Promise<string>;
+  commitMessage(inputs: Inputs): string | Promise<string>;
+  prTitle(inputs: Inputs): string | Promise<string>;
+  prDescription(inputs: Inputs): string | Promise<string>;
 }
 
 export interface OperationOverrides {

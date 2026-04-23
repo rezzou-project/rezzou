@@ -31,6 +31,13 @@ interface CallFilterTestMessage {
   provider: Provider;
 }
 
+interface CallOperationStringMessage {
+  type: "call-branchName" | "call-commitMessage" | "call-prTitle" | "call-prDescription";
+  callId: string;
+  operationId: string;
+  inputs: Record<string, unknown>;
+}
+
 interface CtxResponseMessage {
   type: "ctx-response";
   ctxCallId: string;
@@ -38,7 +45,21 @@ interface CtxResponseMessage {
   error?: string;
 }
 
-type IncomingMessage = LoadMessage | CallApplyMessage | CallFilterTestMessage | CtxResponseMessage;
+type OperationStringFn = "branchName" | "commitMessage" | "prTitle" | "prDescription";
+
+interface CallStringFnOptions {
+  callId: string;
+  operationId: string;
+  fnName: OperationStringFn;
+  inputs: Record<string, unknown>;
+}
+
+type IncomingMessage =
+  | LoadMessage
+  | CallApplyMessage
+  | CallFilterTestMessage
+  | CallOperationStringMessage
+  | CtxResponseMessage;
 
 let plugin: ReturnType<typeof parsePlugin> | null = null;
 const pendingCtxCalls = new Map<string, CallPending>();
@@ -63,6 +84,24 @@ function createContextProxy(callId: string, repo: Repo, provider: Provider): Rep
   };
 }
 
+async function callOperationStringFn(options: CallStringFnOptions): Promise<void> {
+  const { callId, operationId, fnName, inputs } = options;
+  const operation = plugin!.operations.find((op: Operation) => op.id === operationId);
+  if (!operation) {
+    process.send!({ type: "call-error", callId, error: `Operation not found: ${operationId}` });
+
+    return;
+  }
+
+  try {
+    const value = await operation[fnName](inputs);
+    process.send!({ type: "call-result", callId, value });
+  }
+  catch (error) {
+    process.send!({ type: "call-error", callId, error: String(error) });
+  }
+}
+
 async function handleMessage(msg: IncomingMessage): Promise<void> {
   if (msg.type === "load") {
     try {
@@ -80,11 +119,7 @@ async function handleMessage(msg: IncomingMessage): Promise<void> {
             id: operation.id,
             name: operation.name,
             description: operation.description,
-            inputs: operation.inputs ? [...operation.inputs] : undefined,
-            branchNameFn: operation.branchName.toString(),
-            commitMessageFn: operation.commitMessage.toString(),
-            prTitleFn: operation.prTitle.toString(),
-            prDescriptionFn: operation.prDescription.toString()
+            inputs: operation.inputs ? [...operation.inputs] : undefined
           };
         }),
         filters: (plugin.filters ?? []).map((filter: RepoFilter) => {
@@ -167,6 +202,36 @@ async function handleMessage(msg: IncomingMessage): Promise<void> {
     catch (error) {
       process.send!({ type: "call-error", callId: msg.callId, error: String(error) });
     }
+
+    return;
+  }
+
+  if (msg.type === "call-branchName") {
+    await callOperationStringFn({ callId: msg.callId, operationId: msg.operationId, fnName: "branchName", inputs: msg.inputs });
+
+    return;
+  }
+
+  if (msg.type === "call-commitMessage") {
+    await callOperationStringFn({
+      callId: msg.callId, operationId: msg.operationId, fnName: "commitMessage", inputs: msg.inputs
+    });
+
+    return;
+  }
+
+  if (msg.type === "call-prTitle") {
+    await callOperationStringFn({
+      callId: msg.callId, operationId: msg.operationId, fnName: "prTitle", inputs: msg.inputs
+    });
+
+    return;
+  }
+
+  if (msg.type === "call-prDescription") {
+    await callOperationStringFn({
+      callId: msg.callId, operationId: msg.operationId, fnName: "prDescription", inputs: msg.inputs
+    });
   }
 }
 
