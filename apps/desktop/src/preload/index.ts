@@ -9,8 +9,16 @@ import type {
   Member,
   OperationDefaults,
   OperationOverrides,
-  RepoStats
+  RepoStats,
+  InputField
 } from "@rezzou/core";
+
+interface OperationInfo {
+  id: string;
+  name: string;
+  description: string;
+  inputs?: readonly InputField[];
+}
 
 interface PluginInfo {
   id: string;
@@ -136,9 +144,9 @@ contextBridge.exposeInMainWorld("api", {
   },
 
   onOperationsChanged: (
-    callback: (ops: { id: string; name: string; description: string; }[]) => void
+    callback: (ops: OperationInfo[]) => void
   ): (() => void) => {
-    function listener(_event: unknown, ops: { id: string; name: string; description: string; }[]) {
+    function listener(_event: unknown, ops: OperationInfo[]) {
       callback(ops);
     }
     ipcRenderer.on("registry:operationsChanged", listener);

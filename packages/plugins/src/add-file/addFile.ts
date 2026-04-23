@@ -22,9 +22,9 @@ export const addFileOperation = defineOperation<AddFileInputs>({
     {
       name: "content",
       label: "File content",
-      type: "string" as const,
+      type: "file-content" as const,
       required: true,
-      placeholder: "File content…"
+      relatedPathField: "path"
     },
     {
       name: "overwrite",

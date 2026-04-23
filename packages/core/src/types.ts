@@ -37,7 +37,7 @@ export interface RepoContext {
   exists(path: string): Promise<boolean>;
 }
 
-export type InputFieldType = "string" | "number" | "boolean" | "select" | "multiselect";
+export type InputFieldType = "string" | "number" | "boolean" | "select" | "multiselect" | "file-content";
 
 export interface InputField {
   name: string;
@@ -51,6 +51,10 @@ export interface InputField {
   pattern?: string;
   min?: number;
   max?: number;
+  /**
+   * For "file-content" fields: name of the sibling field holding the file path (used for language detection).
+   */
+  relatedPathField?: string;
 }
 
 export interface Operation<Inputs extends Record<string, unknown> = Record<string, unknown>> {

@@ -1,4 +1,4 @@
-import type { Repo, RepoDiff, SubmitResult, Provider, Namespace, Member, OperationDefaults, OperationOverrides, RepoStats } from "@rezzou/core";
+import type { Repo, RepoDiff, SubmitResult, Provider, Namespace, Member, OperationDefaults, OperationOverrides, RepoStats, InputField } from "@rezzou/core";
 
 interface LoadedPluginInfo {
   id: string;
@@ -45,7 +45,7 @@ declare global {
         provider: Provider;
       }): Promise<SubmitResult>;
       checkBranchConflicts(repoPaths: string[], branchName: string, provider: Provider): Promise<string[]>;
-      listOperations(): Promise<{ id: string; name: string; description: string; }[]>;
+      listOperations(): Promise<{ id: string; name: string; description: string; inputs?: readonly InputField[]; }[]>;
       getOperationDefaults(operationId: string, inputs: Record<string, unknown>): Promise<OperationDefaults>;
       fetchMembers(namespace: string, provider: Provider): Promise<Member[]>;
       getRepoStats(repoPath: string, provider: Provider): Promise<RepoStats>;
@@ -54,7 +54,7 @@ declare global {
       cancelOAuth(): Promise<void>;
       onOAuthAuthenticated(callback: (namespaces: Namespace[], provider: Provider) => void): () => void;
       onOAuthError(callback: (message: string) => void): () => void;
-      onOperationsChanged(callback: (ops: { id: string; name: string; description: string; }[]) => void): () => void;
+      onOperationsChanged(callback: (ops: { id: string; name: string; description: string; inputs?: readonly InputField[]; }[]) => void): () => void;
       loadPlugin(filePath: string): Promise<{ id: string; name: string; version: string; }>;
       pickAndLoadPlugin(): Promise<{ id: string; name: string; version: string; } | null>;
       getMissingPlugins(): Promise<string[]>;
