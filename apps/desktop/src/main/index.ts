@@ -4,7 +4,15 @@ import * as fs from "node:fs";
 
 // Import Third-party Dependencies
 import { app, BrowserWindow, shell, ipcMain, dialog } from "electron";
-import { ApiRepoContext, type Repo, type RepoDiff, type ProviderAdapter, type Provider, type Namespace } from "@rezzou/core";
+import {
+  ApiRepoContext,
+  type Repo,
+  type RepoDiff,
+  type ProviderAdapter,
+  type Provider,
+  type Namespace,
+  type OperationOverrides
+} from "@rezzou/core";
 
 // Import Internal Dependencies
 import {
@@ -20,7 +28,6 @@ import {
   handleGitHubDevicePoll,
   handleGitLabOAuthStart,
   handleGitLabOAuthCallback,
-  type ApplyDiffOptions,
   type GetOperationDefaultsOptions
 } from "./handlers.ts";
 import { listOperations, registry, type OperationInfo } from "./operation-registry.ts";
@@ -44,10 +51,26 @@ interface ScanReposPayload {
   repos: Repo[];
   operationId: string;
   inputs: Record<string, unknown>;
+  provider: Provider;
+}
+
+interface ApplyDiffPayload {
+  diff: RepoDiff;
+  inputs: Record<string, unknown>;
+  operationId: string;
+  overrides?: OperationOverrides;
+  force?: boolean;
+  provider: Provider;
+}
+
+interface FetchMembersPayload {
+  namespace: string;
+  provider: Provider;
 }
 
 interface GetRepoStatsPayload {
   repoPath: string;
+  provider: Provider;
 }
 
 interface LoadPluginPayload {
@@ -79,11 +102,13 @@ interface ReloadPluginPayload {
 interface FilterReposPayload {
   repos: Repo[];
   filterIds: string[];
+  provider: Provider;
 }
 
 interface CheckBranchConflictsPayload {
   repoPaths: string[];
   branchName: string;
+  provider: Provider;
 }
 
 interface AddHistoryEntryPayload {
@@ -95,7 +120,6 @@ const kGitHubClientId = import.meta.env.MAIN_VITE_GITHUB_CLIENT_ID as string;
 const kGitLabClientId = import.meta.env.MAIN_VITE_GITLAB_CLIENT_ID as string;
 
 const adapters = new Map<Provider, ProviderAdapter>();
-let currentAdapter: ProviderAdapter | null = null;
 let mainWindow: BrowserWindow | null = null;
 let pendingGitLabVerifier: string | null = null;
 let githubDeviceAbortController: AbortController | null = null;
@@ -127,6 +151,15 @@ function createWindow(): void {
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
+}
+
+function getAdapter(provider: Provider): ProviderAdapter {
+  const adapter = adapters.get(provider);
+  if (!adapter) {
+    throw new Error(`Not connected to ${provider}`);
+  }
+
+  return adapter;
 }
 
 function toError(err: unknown): never {
@@ -252,47 +285,30 @@ app.whenReady().then(async() => {
 
   ipcMain.handle("auth:loadRepos", async(_event, payload: LoadReposPayload): Promise<Repo[]> => {
     const { namespace, provider } = payload;
-    const adapter = adapters.get(provider);
-    if (!adapter) {
-      throw new Error(`Not connected to ${provider}`);
-    }
 
-    currentAdapter = adapter;
-
-    return handleLoadRepos(adapter, namespace).catch(toError);
+    return handleLoadRepos(getAdapter(provider), namespace).catch(toError);
   });
 
   ipcMain.handle("engine:scanRepos", async(_event, payload: ScanReposPayload): Promise<RepoDiff[]> => {
-    const { repos, operationId, inputs } = payload;
-    if (currentAdapter === null) {
-      throw new Error("Not connected");
-    }
+    const { repos, operationId, inputs, provider } = payload;
 
     return handleScanRepos(
-      currentAdapter,
+      getAdapter(provider),
       repos,
-      {
-        operationId,
-        inputs
-      }
+      { operationId, inputs }
     ).catch(toError);
   });
 
-  ipcMain.handle("engine:applyDiff", async(_event, payload: ApplyDiffOptions) => {
-    if (currentAdapter === null) {
-      throw new Error("Not connected");
-    }
+  ipcMain.handle("engine:applyDiff", async(_event, payload: ApplyDiffPayload) => {
+    const { provider, ...options } = payload;
 
-    return handleApplyDiff(currentAdapter, payload).catch(toError);
+    return handleApplyDiff(getAdapter(provider), options).catch(toError);
   });
 
   ipcMain.handle("engine:checkBranchConflicts", async(_event, payload: CheckBranchConflictsPayload): Promise<string[]> => {
-    const { repoPaths, branchName } = payload;
-    if (currentAdapter === null) {
-      throw new Error("Not connected");
-    }
+    const { repoPaths, branchName, provider } = payload;
 
-    return handleCheckBranchConflicts(currentAdapter, { repoPaths, branchName }).catch(toError);
+    return handleCheckBranchConflicts(getAdapter(provider), { repoPaths, branchName }).catch(toError);
   });
 
   ipcMain.handle("engine:listOperations", (): OperationInfo[] => listOperations());
@@ -300,16 +316,13 @@ app.whenReady().then(async() => {
   ipcMain.handle("engine:listFilters", () => filterRegistry.list());
 
   ipcMain.handle("engine:filterRepos", async(_event, payload: FilterReposPayload): Promise<string[]> => {
-    const { repos, filterIds } = payload;
-    if (currentAdapter === null) {
-      throw new Error("Not connected");
-    }
-
+    const { repos, filterIds, provider } = payload;
+    const adapter = getAdapter(provider);
     const filters = filterIds.map((id) => filterRegistry.get(id));
     const passingIds: string[] = [];
 
     for (const repo of repos) {
-      const ctx = new ApiRepoContext(currentAdapter, repo);
+      const ctx = new ApiRepoContext(adapter, repo);
       const results = await Promise.all(filters.map((filter) => filter.test(ctx)));
       if (results.every(Boolean)) {
         passingIds.push(repo.id);
@@ -393,12 +406,10 @@ app.whenReady().then(async() => {
     return handleGetOperationDefaults({ operationId, inputs });
   });
 
-  ipcMain.handle("engine:fetchMembers", async(_event, namespace: string) => {
-    if (currentAdapter === null) {
-      throw new Error("Not connected");
-    }
+  ipcMain.handle("engine:fetchMembers", async(_event, payload: FetchMembersPayload) => {
+    const { namespace, provider } = payload;
 
-    return handleFetchMembers(currentAdapter, namespace).catch(toError);
+    return handleFetchMembers(getAdapter(provider), namespace).catch(toError);
   });
 
   ipcMain.handle("history:list", (): HistoryEntry[] => readHistory());
@@ -409,12 +420,9 @@ app.whenReady().then(async() => {
   });
 
   ipcMain.handle("engine:getRepoStats", async(_event, payload: GetRepoStatsPayload) => {
-    const { repoPath } = payload;
-    if (currentAdapter === null) {
-      throw new Error("Not connected");
-    }
+    const { repoPath, provider } = payload;
 
-    return handleGetRepoStats(currentAdapter, repoPath).catch(toError);
+    return handleGetRepoStats(getAdapter(provider), repoPath).catch(toError);
   });
 
   const persistedPaths = readPluginPaths();

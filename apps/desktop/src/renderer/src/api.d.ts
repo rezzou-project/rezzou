@@ -36,13 +36,19 @@ declare global {
       autoLogin(): Promise<{ namespaces: Namespace[]; provider: Provider; }[] | null>;
       authenticate(token: string, provider: Provider): Promise<Namespace[]>;
       loadRepos(namespace: string, provider: Provider): Promise<Repo[]>;
-      scanRepos(repos: Repo[], operationId: string, inputs: Record<string, unknown>): Promise<RepoDiff[]>;
-      applyDiff(diff: RepoDiff, options: { inputs: Record<string, unknown>; operationId: string; overrides?: OperationOverrides; force?: boolean; }): Promise<SubmitResult>;
-      checkBranchConflicts(repoPaths: string[], branchName: string): Promise<string[]>;
+      scanRepos(repos: Repo[], operationId: string, options: { inputs: Record<string, unknown>; provider: Provider; }): Promise<RepoDiff[]>;
+      applyDiff(diff: RepoDiff, options: {
+        inputs: Record<string, unknown>;
+        operationId: string;
+        overrides?: OperationOverrides;
+        force?: boolean;
+        provider: Provider;
+      }): Promise<SubmitResult>;
+      checkBranchConflicts(repoPaths: string[], branchName: string, provider: Provider): Promise<string[]>;
       listOperations(): Promise<{ id: string; name: string; description: string; }[]>;
       getOperationDefaults(operationId: string, inputs: Record<string, unknown>): Promise<OperationDefaults>;
-      fetchMembers(namespace: string): Promise<Member[]>;
-      getRepoStats(repoPath: string): Promise<RepoStats>;
+      fetchMembers(namespace: string, provider: Provider): Promise<Member[]>;
+      getRepoStats(repoPath: string, provider: Provider): Promise<RepoStats>;
       startGitHubOAuth(): Promise<{ user_code: string; verification_uri: string; }>;
       startGitLabOAuth(): Promise<void>;
       cancelOAuth(): Promise<void>;
@@ -57,7 +63,7 @@ declare global {
       reloadPlugin(filePath: string): Promise<{ id: string; name: string; version: string; }>;
       onPluginsChanged(callback: (plugins: LoadedPluginInfo[]) => void): () => void;
       listFilters(): Promise<FilterInfo[]>;
-      filterRepos(repos: Repo[], filterIds: string[]): Promise<string[]>;
+      filterRepos(repos: Repo[], filterIds: string[], provider: Provider): Promise<string[]>;
       onFiltersChanged(callback: (filters: FilterInfo[]) => void): () => void;
       listHistory(): Promise<HistoryEntry[]>;
       addHistoryEntry(entry: HistoryEntry): Promise<void>;

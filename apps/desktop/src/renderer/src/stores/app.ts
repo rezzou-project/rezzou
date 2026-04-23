@@ -226,7 +226,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
     },
 
     loadAllRepoStats: async() => {
-      const { repos } = get();
+      const { repos, selectedNamespace } = get();
 
       set({ repoStats: Object.fromEntries(repos.map((repo) => [repo.id, "loading" as const])) });
 
@@ -235,7 +235,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
         await Promise.all(
           batch.map(async(repo) => {
             try {
-              const stats = await window.api.getRepoStats(repo.fullPath);
+              const stats = await window.api.getRepoStats(repo.fullPath, selectedNamespace!.provider);
               set((state) => {
                 return { repoStats: { ...state.repoStats, [repo.id]: stats } };
               });
@@ -287,7 +287,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
 
       set({ isFilteringRepos: true });
       try {
-        const passingIds = await window.api.filterRepos(repos, newActiveFilterIds);
+        const passingIds = await window.api.filterRepos(repos, newActiveFilterIds, get().selectedNamespace!.provider);
         set({ filteredRepoIds: passingIds, isFilteringRepos: false });
       }
       catch {
@@ -337,7 +337,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
     },
 
     confirmApply: async() => {
-      const { applyModalTarget, applyModalRepoPath, operationOverrides, diffs } = get();
+      const { applyModalTarget, applyModalRepoPath, operationOverrides, diffs, selectedNamespace } = get();
       set({ applyModalTarget: null, applyModalRepoPath: null });
 
       if (applyModalTarget === null) {
@@ -349,7 +349,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
         ? diffs.filter((diff) => diff.applyStatus === applyStatus.Pending).map((diff) => diff.repo.fullPath)
         : [applyModalRepoPath!];
 
-      const conflictingPaths = await window.api.checkBranchConflicts(repoPaths, branchName);
+      const conflictingPaths = await window.api.checkBranchConflicts(repoPaths, branchName, selectedNamespace!.provider);
 
       if (conflictingPaths.length > 0) {
         set({
@@ -418,12 +418,16 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
     },
 
     scanRepos: async() => {
-      const { repos, selectedRepoIds, selectedOperationId, operationInputs } = get();
+      const { repos, selectedRepoIds, selectedOperationId, operationInputs, selectedNamespace } = get();
 
       set({ isLoading: true, error: null });
 
       const selectedRepos = repos.filter((repo) => selectedRepoIds.includes(repo.id));
-      const baseDiffs = await window.api.scanRepos(selectedRepos, selectedOperationId, operationInputs);
+      const baseDiffs = await window.api.scanRepos(
+        selectedRepos,
+        selectedOperationId,
+        { inputs: operationInputs, provider: selectedNamespace!.provider }
+      );
       const diffs: RepoDiff[] = baseDiffs.map((diff) => {
         return {
           ...diff,
@@ -435,7 +439,9 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
     },
 
     applyDiff: async(repoPath: string) => {
-      const { diffs, operationInputs, operationOverrides, selectedOperationId, branchConflictStrategy } = get();
+      const {
+        diffs, operationInputs, operationOverrides, selectedOperationId, branchConflictStrategy, selectedNamespace
+      } = get();
 
       const diffIndex = diffs.findIndex((diff) => diff.repo.fullPath === repoPath);
       if (diffIndex === -1) {
@@ -465,7 +471,13 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
       try {
         const result: SubmitResult = await window.api.applyDiff(
           diff,
-          { inputs: operationInputs, operationId: selectedOperationId, overrides: effectiveOverrides, force }
+          {
+            inputs: operationInputs,
+            operationId: selectedOperationId,
+            overrides: effectiveOverrides,
+            force,
+            provider: selectedNamespace!.provider
+          }
         );
 
         set((state) => {

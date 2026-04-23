@@ -67,18 +67,25 @@ contextBridge.exposeInMainWorld("api", {
   scanRepos: (
     repos: Repo[],
     operationId: string,
-    inputs: Record<string, unknown>
-  ): Promise<RepoDiff[]> => ipcRenderer.invoke("engine:scanRepos", { repos, operationId, inputs }),
+    options: { inputs: Record<string, unknown>; provider: Provider; }
+  ): Promise<RepoDiff[]> => ipcRenderer.invoke("engine:scanRepos", { repos, operationId, ...options }),
 
   applyDiff: (
     diff: RepoDiff,
-    options: { inputs: Record<string, unknown>; operationId: string; overrides?: OperationOverrides; force?: boolean; }
+    options: {
+      inputs: Record<string, unknown>;
+      operationId: string;
+      overrides?: OperationOverrides;
+      force?: boolean;
+      provider: Provider;
+    }
   ): Promise<SubmitResult> => ipcRenderer.invoke("engine:applyDiff", { diff, ...options }),
 
   checkBranchConflicts: (
     repoPaths: string[],
-    branchName: string
-  ): Promise<string[]> => ipcRenderer.invoke("engine:checkBranchConflicts", { repoPaths, branchName }),
+    branchName: string,
+    provider: Provider
+  ): Promise<string[]> => ipcRenderer.invoke("engine:checkBranchConflicts", { repoPaths, branchName, provider }),
 
   listOperations: () => ipcRenderer.invoke("engine:listOperations"),
 
@@ -87,9 +94,15 @@ contextBridge.exposeInMainWorld("api", {
     inputs: Record<string, unknown>
   ): Promise<OperationDefaults> => ipcRenderer.invoke("engine:getOperationDefaults", { operationId, inputs }),
 
-  fetchMembers: (namespace: string): Promise<Member[]> => ipcRenderer.invoke("engine:fetchMembers", namespace),
+  fetchMembers: (
+    namespace: string,
+    provider: Provider
+  ): Promise<Member[]> => ipcRenderer.invoke("engine:fetchMembers", { namespace, provider }),
 
-  getRepoStats: (repoPath: string): Promise<RepoStats> => ipcRenderer.invoke("engine:getRepoStats", { repoPath }),
+  getRepoStats: (
+    repoPath: string,
+    provider: Provider
+  ): Promise<RepoStats> => ipcRenderer.invoke("engine:getRepoStats", { repoPath, provider }),
 
   autoLogin: (): Promise<{ namespaces: Namespace[]; provider: Provider; }[] | null> => ipcRenderer.invoke("auth:auto-login"),
 
@@ -160,8 +173,9 @@ contextBridge.exposeInMainWorld("api", {
 
   filterRepos: (
     repos: Repo[],
-    filterIds: string[]
-  ): Promise<string[]> => ipcRenderer.invoke("engine:filterRepos", { repos, filterIds }),
+    filterIds: string[],
+    provider: Provider
+  ): Promise<string[]> => ipcRenderer.invoke("engine:filterRepos", { repos, filterIds, provider }),
 
   onFiltersChanged: (
     callback: (filters: FilterInfo[]) => void

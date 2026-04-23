@@ -350,8 +350,8 @@ describe("scanRepos", () => {
 
     await getState().scanRepos();
 
-    const [,, passedInputs] = mockApiScanRepos.mock.calls[0].arguments;
-    assert.deepEqual(passedInputs, { year: 2030 });
+    const [,, passedOptions] = mockApiScanRepos.mock.calls[0].arguments;
+    assert.deepEqual(passedOptions.inputs, { year: 2030 });
   });
 });
 
