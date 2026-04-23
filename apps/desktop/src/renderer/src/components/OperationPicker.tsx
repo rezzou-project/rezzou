@@ -22,7 +22,15 @@ export function OperationPicker() {
   } = useAppStore();
 
   useEffect(() => {
-    void window.api.listOperations().then(setOperations);
+    void window.api.listOperations().then((ops) => {
+      setOperations(ops);
+      if (Object.keys(operationInputs).length === 0 && selectedOperationId !== "") {
+        const op = ops.find((o) => o.id === selectedOperationId);
+        if (op?.inputs && op.inputs.length > 0) {
+          setOperationInputs(getDefaultValues(op.inputs));
+        }
+      }
+    });
     void window.api.getMissingPlugins().then((paths) => {
       if (paths.length > 0) {
         setMissingPlugins(paths);
