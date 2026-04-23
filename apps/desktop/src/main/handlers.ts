@@ -116,15 +116,15 @@ export interface GetOperationDefaultsOptions {
   inputs: Record<string, unknown>;
 }
 
-export function handleGetOperationDefaults(options: GetOperationDefaultsOptions): OperationDefaults {
+export async function handleGetOperationDefaults(options: GetOperationDefaultsOptions): Promise<OperationDefaults> {
   const { operationId, inputs } = options;
   const operation = getOperation(operationId);
 
   return {
-    branchName: operation.branchName(inputs),
-    commitMessage: operation.commitMessage(inputs),
-    prTitle: operation.prTitle(inputs),
-    prDescription: operation.prDescription(inputs)
+    branchName: await operation.branchName(inputs),
+    commitMessage: await operation.commitMessage(inputs),
+    prTitle: await operation.prTitle(inputs),
+    prDescription: await operation.prDescription(inputs)
   };
 }
 

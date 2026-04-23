@@ -43,10 +43,10 @@ export async function applyRepoDiff<I extends Record<string, unknown>>(
   return adapter.submitChanges({
     repoPath: diff.repo.fullPath,
     baseBranch: diff.repo.defaultBranch,
-    headBranch: overrides?.branchName ?? operation.branchName(inputs),
-    commitMessage: overrides?.commitMessage ?? operation.commitMessage(inputs),
-    prTitle: overrides?.prTitle ?? operation.prTitle(inputs),
-    prDescription: overrides?.prDescription ?? operation.prDescription(inputs),
+    headBranch: overrides?.branchName ?? await operation.branchName(inputs),
+    commitMessage: overrides?.commitMessage ?? await operation.commitMessage(inputs),
+    prTitle: overrides?.prTitle ?? await operation.prTitle(inputs),
+    prDescription: overrides?.prDescription ?? await operation.prDescription(inputs),
     reviewers: overrides?.reviewers ?? [],
     files: diff.patches.map((patch) => {
       return {

@@ -18,6 +18,8 @@ import {
 import { registry as operationRegistry } from "./operation-registry.ts";
 import { filterRegistry } from "./filter-registry.ts";
 
+type OperationStringFn = "branchName" | "commitMessage" | "prTitle" | "prDescription";
+
 interface CallPending {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
@@ -28,10 +30,6 @@ interface SerializedOperation {
   name: string;
   description: string;
   inputs?: InputField[];
-  branchNameFn: string;
-  commitMessageFn: string;
-  prTitleFn: string;
-  prDescriptionFn: string;
 }
 
 interface SerializedPlugin {
@@ -98,15 +96,6 @@ async function loadJsPlugin(filePath: string): Promise<Plugin> {
   return plugin;
 }
 
-function reconstructFn<TFn>(fnStr: string): TFn {
-  // Method shorthand "name(...) {...}" is not a valid expression; prepend `function`.
-  const isMethodShorthand = !/^(?:function\b|\(|async\s*\(|async\s+function\b)/.test(fnStr);
-  const normalized = isMethodShorthand ? `function ${fnStr}` : fnStr;
-
-  // eslint-disable-next-line no-new-func
-  return new Function(`return (${normalized})`)() as unknown as TFn;
-}
-
 async function loadTsPlugin(filePath: string): Promise<Plugin> {
   const currentDir = path.dirname(url.fileURLToPath(import.meta.url));
   const runnerPath = path.join(currentDir, "plugin-ts-runner.js");
@@ -164,23 +153,25 @@ async function loadTsPlugin(filePath: string): Promise<Plugin> {
     }
   });
 
-  const serialized = await new Promise<SerializedPlugin>(function awaitPluginLoad(resolve, reject) {
-    function onLoadMessage(rawMsg: unknown) {
-      const msg = rawMsg as Record<string, unknown>;
-      if (msg.type === "loaded") {
-        child.off("message", onLoadMessage);
-        resolve(msg.plugin as SerializedPlugin);
-      }
-      else if (msg.type === "load-error") {
-        child.off("message", onLoadMessage);
-        reject(new Error(msg.error as string));
-      }
-    }
+  const { promise: loadPromise, resolve: resolveLoad, reject: rejectLoad } = Promise.withResolvers<SerializedPlugin>();
 
-    child.on("message", onLoadMessage);
-    child.once("error", reject);
-    child.send({ type: "load", filePath });
-  });
+  function onLoadMessage(rawMsg: unknown) {
+    const msg = rawMsg as Record<string, unknown>;
+    if (msg.type === "loaded") {
+      child.off("message", onLoadMessage);
+      resolveLoad(msg.plugin as SerializedPlugin);
+    }
+    else if (msg.type === "load-error") {
+      child.off("message", onLoadMessage);
+      rejectLoad(new Error(msg.error as string));
+    }
+  }
+
+  child.on("message", onLoadMessage);
+  child.once("error", rejectLoad);
+  child.send({ type: "load", filePath });
+
+  const serialized = await loadPromise;
 
   child.once("exit", function onChildExit(code) {
     const exitError = new Error(`Plugin runner exited unexpectedly (code ${code})`);
@@ -192,36 +183,49 @@ async function loadTsPlugin(filePath: string): Promise<Plugin> {
   });
 
   function makeApplyFn(operationId: string): Operation["apply"] {
-    return async function proxyApply(ctx: RepoContext, inputs: Record<string, unknown>) {
+    return function proxyApply(ctx: RepoContext, inputs: Record<string, unknown>) {
       const callId = `apply-${callIdCounter++}`;
       activeContexts.set(callId, ctx);
-
-      return new Promise<Patch[] | null>(function awaitApply(resolve, reject) {
-        pendingCalls.set(callId, {
-          resolve: (value) => {
-            resolve(value as Patch[] | null);
-          },
-          reject
-        });
-        child.send({ type: "call-apply", callId, operationId, inputs, repo: ctx.repo, provider: ctx.provider });
+      const { promise, resolve, reject } = Promise.withResolvers<Patch[] | null>();
+      pendingCalls.set(callId, {
+        resolve: (value) => resolve(value as Patch[] | null),
+        reject
       });
+      child.send({ type: "call-apply", callId, operationId, inputs, repo: ctx.repo, provider: ctx.provider });
+
+      return promise;
+    };
+  }
+
+  function makeOperationStringFn(
+    operationId: string,
+    fnName: OperationStringFn
+  ): (inputs: Record<string, unknown>) => Promise<string> {
+    return function proxyStringFn(inputs: Record<string, unknown>) {
+      const callId = `${fnName}-${callIdCounter++}`;
+      const { promise, resolve, reject } = Promise.withResolvers<string>();
+      pendingCalls.set(callId, {
+        resolve: (value) => resolve(value as string),
+        reject
+      });
+      child.send({ type: `call-${fnName}`, callId, operationId, inputs });
+
+      return promise;
     };
   }
 
   function makeFilterTestFn(filterId: string): RepoFilter["test"] {
-    return async function proxyFilterTest(ctx: RepoContext) {
+    return function proxyFilterTest(ctx: RepoContext) {
       const callId = `filter-${callIdCounter++}`;
       activeContexts.set(callId, ctx);
-
-      return new Promise<boolean>(function awaitFilterTest(resolve, reject) {
-        pendingCalls.set(callId, {
-          resolve: (value) => {
-            resolve(value as boolean);
-          },
-          reject
-        });
-        child.send({ type: "call-filter-test", callId, filterId, repo: ctx.repo, provider: ctx.provider });
+      const { promise, resolve, reject } = Promise.withResolvers<boolean>();
+      pendingCalls.set(callId, {
+        resolve: (value) => resolve(value as boolean),
+        reject
       });
+      child.send({ type: "call-filter-test", callId, filterId, repo: ctx.repo, provider: ctx.provider });
+
+      return promise;
     };
   }
 
@@ -231,10 +235,10 @@ async function loadTsPlugin(filePath: string): Promise<Plugin> {
       name: opMeta.name,
       description: opMeta.description,
       inputs: opMeta.inputs,
-      branchName: reconstructFn<Operation["branchName"]>(opMeta.branchNameFn),
-      commitMessage: reconstructFn<Operation["commitMessage"]>(opMeta.commitMessageFn),
-      prTitle: reconstructFn<Operation["prTitle"]>(opMeta.prTitleFn),
-      prDescription: reconstructFn<Operation["prDescription"]>(opMeta.prDescriptionFn),
+      branchName: makeOperationStringFn(opMeta.id, "branchName"),
+      commitMessage: makeOperationStringFn(opMeta.id, "commitMessage"),
+      prTitle: makeOperationStringFn(opMeta.id, "prTitle"),
+      prDescription: makeOperationStringFn(opMeta.id, "prDescription"),
       apply: makeApplyFn(opMeta.id)
     };
   });

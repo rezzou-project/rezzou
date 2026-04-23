@@ -317,8 +317,8 @@ describe("handleGetOperationDefaults", () => {
     mockGetOperation.mock.resetCalls();
   });
 
-  it("should return computed branch, commit, prTitle and prDescription from the operation", () => {
-    const result = handleGetOperationDefaults({ operationId: "license-year", inputs: {} });
+  it("should return computed branch, commit, prTitle and prDescription from the operation", async() => {
+    const result = await handleGetOperationDefaults({ operationId: "license-year", inputs: {} });
 
     assert.equal(result.branchName, `rezzou/license-year-${kCurrentYear}`);
     assert.equal(result.commitMessage, `chore: update license year to ${kCurrentYear}`);
@@ -326,8 +326,8 @@ describe("handleGetOperationDefaults", () => {
     assert.equal(result.prDescription, "Automated update");
   });
 
-  it("should resolve the operation from registry using operationId", () => {
-    handleGetOperationDefaults({ operationId: "gitignore", inputs: {} });
+  it("should resolve the operation from registry using operationId", async() => {
+    await handleGetOperationDefaults({ operationId: "gitignore", inputs: {} });
 
     assert.equal(mockGetOperation.mock.callCount(), 1);
     assert.equal(mockGetOperation.mock.calls[0].arguments[0], "gitignore");
