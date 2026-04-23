@@ -275,7 +275,7 @@ function ApplyModal() {
   useEffect(() => {
     if (applyModalTarget !== null && selectedNamespace?.type === "org") {
       setIsFetchingMembers(true);
-      window.api.fetchMembers(selectedNamespace.name)
+      window.api.fetchMembers(selectedNamespace.name, selectedNamespace.provider)
         .then(setMembers)
         .catch(() => setMembers([]))
         .finally(() => setIsFetchingMembers(false));
