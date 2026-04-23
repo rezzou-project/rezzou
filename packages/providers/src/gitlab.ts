@@ -4,6 +4,7 @@ import type { NamespaceType, Namespace, Repo, FileContent, SubmitParams, SubmitR
 
 // Import Internal Dependencies
 import { BaseProvider } from "./base.ts";
+import { mapProviderError } from "./errors.ts";
 
 export class GitLabAdapter extends BaseProvider {
   readonly provider = "gitlab" as const;
@@ -149,7 +150,7 @@ export class GitLabAdapter extends BaseProvider {
     }
     catch (error) {
       await this.#client.Branches.remove(params.repoPath, params.headBranch).catch(() => void 0);
-      throw new Error(`Failed to create merge request for ${params.repoPath}`, { cause: error });
+      throw mapProviderError(error, `Failed to create merge request for ${params.repoPath}`);
     }
   }
 

@@ -22,3 +22,5 @@ export type {
 } from "./types.ts";
 export { scanRepos, applyRepoDiff } from "./engine.ts";
 export { ApiRepoContext } from "./context.ts";
+export { RezzouError } from "./errors.ts";
+export type { RezzouErrorCode } from "./errors.ts";

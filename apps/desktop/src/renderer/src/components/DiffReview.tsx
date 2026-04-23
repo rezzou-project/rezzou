@@ -140,7 +140,9 @@ function DiffCard({ diff }: { diff: RepoDiff; }) {
         )}
 
         {diff.applyStatus === "error" && (
-          <span className="text-xs text-red-400">{diff.error}</span>
+          <span className={`text-xs ${diff.errorCode === "rate-limit" ? "text-orange-400" : "text-red-400"}`}>
+            {diff.error}
+          </span>
         )}
       </div>
 

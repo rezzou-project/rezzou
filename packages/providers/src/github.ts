@@ -4,6 +4,7 @@ import type { NamespaceType, Namespace, Repo, FileContent, SubmitParams, SubmitR
 
 // Import Internal Dependencies
 import { BaseProvider } from "./base.ts";
+import { mapProviderError } from "./errors.ts";
 
 // CONSTANTS
 const kCreateCommitMutation = `
@@ -204,7 +205,7 @@ export class GitHubAdapter extends BaseProvider {
       if (branchCreated) {
         await this.#client.git.deleteRef({ owner, repo, ref: `heads/${params.headBranch}` }).catch(() => void 0);
       }
-      throw new Error(`Failed to commit changes to ${params.repoPath}`, { cause: error });
+      throw mapProviderError(error, `Failed to commit changes to ${params.repoPath}`);
     }
 
     const { data: pr } = await this.#client.pulls.create({
@@ -216,7 +217,7 @@ export class GitHubAdapter extends BaseProvider {
       body: params.prDescription
     }).catch((error) => {
       console.warn(`[rezzou] PR creation failed for ${params.repoPath}, branch ${params.headBranch} is ready for manual PR`);
-      throw new Error(`Failed to create pull request for ${params.repoPath}`, { cause: error });
+      throw mapProviderError(error, `Failed to create pull request for ${params.repoPath}`);
     });
 
     if (params.reviewers && params.reviewers.length > 0) {

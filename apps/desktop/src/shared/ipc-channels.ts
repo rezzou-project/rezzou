@@ -9,7 +9,8 @@ import type {
   OperationDefaults,
   OperationOverrides,
   RepoStats,
-  InputField
+  InputField,
+  RezzouErrorCode
 } from "@rezzou/core";
 
 export const IpcChannels = {
@@ -48,6 +49,12 @@ export const IpcChannels = {
   RegistryOperationsChanged: "registry:operationsChanged",
   RegistryFiltersChanged: "registry:filtersChanged"
 } as const;
+
+export interface SerializedRezzouError {
+  code: RezzouErrorCode;
+  message: string;
+  details?: Record<string, unknown>;
+}
 
 // IPC handler payload interfaces (main process)
 
