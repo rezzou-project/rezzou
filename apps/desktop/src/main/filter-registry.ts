@@ -14,6 +14,9 @@ class FilterRegistry extends events.EventEmitter {
   #filters = new Map<string, RepoFilter>();
 
   register(filter: RepoFilter): void {
+    if (this.#filters.has(filter.id)) {
+      throw new Error(`Filter ID collision: "${filter.id}" is already registered`);
+    }
     this.#filters.set(filter.id, filter);
     this.emit("change");
   }

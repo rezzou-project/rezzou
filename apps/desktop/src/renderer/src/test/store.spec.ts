@@ -50,7 +50,7 @@ const kDefaults = {
   prDescription: "Automated update"
 };
 const mockApiGetOperationDefaults = mock.fn(async() => kDefaults);
-const mockApiAddHistoryEntry = mock.fn(async() => undefined);
+const mockApiRecordRun = mock.fn(async() => undefined);
 const mockApiCheckBranchConflicts = mock.fn(async() => [] as string[]);
 
 (globalThis as Record<string, unknown>).window = {
@@ -62,7 +62,7 @@ const mockApiCheckBranchConflicts = mock.fn(async() => [] as string[]);
     applyDiff: mockApiApplyDiff,
     listOperations: mockApiListOperations,
     getOperationDefaults: mockApiGetOperationDefaults,
-    addHistoryEntry: mockApiAddHistoryEntry,
+    recordRun: mockApiRecordRun,
     checkBranchConflicts: mockApiCheckBranchConflicts
   }
 };
@@ -89,7 +89,7 @@ beforeEach(() => {
   mockApiListOperations.mock.resetCalls();
   mockApiApplyDiff.mock.resetCalls();
   mockApiGetOperationDefaults.mock.resetCalls();
-  mockApiAddHistoryEntry.mock.resetCalls();
+  mockApiRecordRun.mock.resetCalls();
   mockApiCheckBranchConflicts.mock.resetCalls();
 });
 

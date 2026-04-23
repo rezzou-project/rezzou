@@ -20,17 +20,52 @@ export function readPluginPaths(): string[] {
   }
 }
 
+function getSubfolderEntry(dirPath: string): string | null {
+  for (const candidate of ["index.ts", "index.js", "index.mjs"]) {
+    const entry = path.join(dirPath, candidate);
+    if (fs.existsSync(entry)) {
+      return entry;
+    }
+  }
+  const pkgFile = path.join(dirPath, "package.json");
+  if (!fs.existsSync(pkgFile)) {
+    return null;
+  }
+  try {
+    const pkg = JSON.parse(fs.readFileSync(pkgFile, "utf-8")) as { main?: string; };
+    if (pkg.main) {
+      const entry = path.join(dirPath, pkg.main);
+
+      return fs.existsSync(entry) ? entry : null;
+    }
+  }
+  catch {
+    // skip unparseable package.json
+  }
+
+  return null;
+}
+
 export function scanPluginsDir(): string[] {
   if (!fs.existsSync(kPluginsDir)) {
     return [];
   }
 
   return fs.readdirSync(kPluginsDir).flatMap((name) => {
-    if (/\.(js|mjs|ts)$/.test(name) === false) {
-      return [];
+    const fullPath = path.join(kPluginsDir, name);
+    const stat = fs.statSync(fullPath);
+
+    if (stat.isFile()) {
+      return /\.(js|mjs|ts)$/.test(name) ? fullPath : [];
     }
 
-    return path.join(kPluginsDir, name);
+    if (stat.isDirectory()) {
+      const entry = getSubfolderEntry(fullPath);
+
+      return entry === null ? [] : entry;
+    }
+
+    return [];
   });
 }
 

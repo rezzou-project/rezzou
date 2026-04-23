@@ -36,6 +36,9 @@ class OperationRegistry extends events.EventEmitter {
   );
 
   register(operation: Operation): void {
+    if (this.#operations.has(operation.id)) {
+      throw new Error(`Operation ID collision: "${operation.id}" is already registered`);
+    }
     this.#operations.set(operation.id, operation);
     this.emit("change");
   }

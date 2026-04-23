@@ -2,6 +2,7 @@
 import * as path from "node:path";
 import * as fs from "node:fs";
 import * as os from "node:os";
+import { randomUUID } from "node:crypto";
 
 // CONSTANTS
 const kRezzouDir = path.join(os.homedir(), ".rezzou");
@@ -45,4 +46,18 @@ export function addHistoryEntry(entry: HistoryEntry): void {
   }
   fs.mkdirSync(kRezzouDir, { recursive: true });
   fs.writeFileSync(kHistoryFile, JSON.stringify(entries, null, 2));
+}
+
+export interface RecordRunPayload {
+  operationId: string;
+  namespace: string;
+  results: HistoryEntryResult[];
+}
+
+export function recordRun(payload: RecordRunPayload): void {
+  addHistoryEntry({
+    id: randomUUID(),
+    timestamp: Date.now(),
+    ...payload
+  });
 }

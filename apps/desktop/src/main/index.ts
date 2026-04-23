@@ -34,7 +34,7 @@ import { listOperations, registry, type OperationInfo } from "./operation-regist
 import { filterRegistry } from "./filter-registry.ts";
 import { loadPlugin, unregisterPluginByPath } from "./plugin-loader.ts";
 import { readPluginPaths, addPluginPath, removePluginPath, scanPluginsDir } from "./plugins-store.ts";
-import { readHistory, addHistoryEntry, type HistoryEntry } from "./history-store.ts";
+import { readHistory, recordRun, type RecordRunPayload } from "./history-store.ts";
 import { saveCredentials, loadSavedCredentials } from "./credentials-store.ts";
 
 interface AuthenticateOptions {
@@ -111,10 +111,6 @@ interface CheckBranchConflictsPayload {
   provider: Provider;
 }
 
-interface AddHistoryEntryPayload {
-  entry: HistoryEntry;
-}
-
 // CONSTANTS
 const kGitHubClientId = import.meta.env.MAIN_VITE_GITHUB_CLIENT_ID as string;
 const kGitLabClientId = import.meta.env.MAIN_VITE_GITLAB_CLIENT_ID as string;
@@ -131,6 +127,9 @@ function createWindow(): void {
     width: 1100,
     height: 800,
     webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
       preload: path.join(import.meta.dirname, "../preload/index.js")
     }
   });
@@ -143,7 +142,9 @@ function createWindow(): void {
   }
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    if (/^https?:\/\//i.test(url)) {
+      shell.openExternal(url);
+    }
 
     return { action: "deny" };
   });
@@ -412,11 +413,10 @@ app.whenReady().then(async() => {
     return handleFetchMembers(getAdapter(provider), namespace).catch(toError);
   });
 
-  ipcMain.handle("history:list", (): HistoryEntry[] => readHistory());
+  ipcMain.handle("history:list", () => readHistory());
 
-  ipcMain.handle("history:add", (_event, payload: AddHistoryEntryPayload): void => {
-    const { entry } = payload;
-    addHistoryEntry(entry);
+  ipcMain.handle("history:record", (_event, payload: RecordRunPayload): void => {
+    recordRun(payload);
   });
 
   ipcMain.handle("engine:getRepoStats", async(_event, payload: GetRepoStatsPayload) => {
