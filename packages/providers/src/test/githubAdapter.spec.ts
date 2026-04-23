@@ -44,10 +44,17 @@ const mockListOrgMembers = mock.fn(async() => {
   return { data: [] as unknown[] };
 });
 
+const mockPaginate = mock.fn(async(method: (params: unknown) => Promise<{ data: unknown[]; }>, params: unknown) => {
+  const result = await method(params);
+
+  return result.data;
+});
+
 mock.module("@octokit/rest", {
   namedExports: {
     Octokit: mock.fn(function MockOctokit() {
       return {
+        paginate: mockPaginate,
         users: {
           getAuthenticated: mockGetAuthenticated
         },
@@ -119,6 +126,7 @@ describe("GitHubAdapter", () => {
     mockPullsCreate.mock.resetCalls();
     mockRequestReviewers.mock.resetCalls();
     mockListOrgMembers.mock.resetCalls();
+    mockPaginate.mock.resetCalls();
   });
 
   describe("listNamespaces", () => {
@@ -177,7 +185,7 @@ describe("GitHubAdapter", () => {
       assert.equal(result[2].name, "another-org");
     });
 
-    it("should call listForAuthenticatedUser with pagination options", async() => {
+    it("should paginate listForAuthenticatedUser with per_page: 100", async() => {
       mockGetAuthenticated.mock.mockImplementation(async() => {
         return { data: { login: "john", name: "John" } };
       });
@@ -188,10 +196,23 @@ describe("GitHubAdapter", () => {
       const adapter = new GitHubAdapter(kToken);
       await adapter.listNamespaces();
 
-      assert.equal(mockListForAuthenticatedUser.mock.callCount(), 1);
-      assert.deepEqual(mockListForAuthenticatedUser.mock.calls[0].arguments, [
-        { per_page: 100 }
-      ]);
+      assert.equal(mockPaginate.mock.callCount(), 1);
+      assert.deepEqual(mockPaginate.mock.calls[0].arguments[1], { per_page: 100 });
+    });
+
+    it("should return all orgs when more than 100 exist", async() => {
+      const manyOrgs = Array.from({ length: 150 }, (_, i) => {
+        return { login: `org-${i}`, avatar_url: null };
+      });
+      mockGetAuthenticated.mock.mockImplementationOnce(async() => {
+        return { data: { login: "john", name: "John" } };
+      });
+      mockPaginate.mock.mockImplementationOnce(async() => manyOrgs);
+
+      const adapter = new GitHubAdapter(kToken);
+      const result = await adapter.listNamespaces();
+
+      assert.equal(result.length, 151);
     });
   });
 
@@ -267,18 +288,36 @@ describe("GitHubAdapter", () => {
       assert.equal(result[0].fullPath, "john/user-repo");
     });
 
-    it("should call listForOrg with namespace and pagination options", async() => {
+    it("should paginate listForOrg with per_page: 100", async() => {
       mockListForOrg.mock.mockImplementation(async() => {
         return { data: [] };
       });
 
       const adapter = await setupOrgAdapter("my-org");
+      mockPaginate.mock.resetCalls();
       await adapter.listRepos("my-org");
 
-      assert.equal(mockListForOrg.mock.callCount(), 1);
-      assert.deepEqual(mockListForOrg.mock.calls[0].arguments, [
-        { org: "my-org", per_page: 100, type: "all" }
-      ]);
+      assert.equal(mockPaginate.mock.callCount(), 1);
+      assert.deepEqual(mockPaginate.mock.calls[0].arguments[1], { org: "my-org", per_page: 100, type: "all" });
+    });
+
+    it("should return all repos when more than 100 exist", async() => {
+      const manyRepos = Array.from({ length: 150 }, (_, i) => {
+        return {
+          id: i,
+          name: `repo-${i}`,
+          full_name: `my-org/repo-${i}`,
+          default_branch: "main",
+          html_url: `https://github.com/my-org/repo-${i}`,
+          archived: false
+        };
+      });
+
+      const adapter = await setupOrgAdapter("my-org");
+      mockPaginate.mock.mockImplementationOnce(async() => manyRepos);
+      const result = await adapter.listRepos("my-org");
+
+      assert.equal(result.length, 150);
     });
   });
 
@@ -479,18 +518,29 @@ describe("GitHubAdapter", () => {
       ]);
     });
 
-    it("should call listMembers with namespace and pagination options", async() => {
+    it("should paginate listMembers with per_page: 100", async() => {
       mockListOrgMembers.mock.mockImplementation(async() => {
         return { data: [] };
       });
 
       const adapter = await setupOrgAdapter("my-org");
+      mockPaginate.mock.resetCalls();
       await adapter.listMembers("my-org");
 
-      assert.equal(mockListOrgMembers.mock.callCount(), 1);
-      assert.deepEqual(mockListOrgMembers.mock.calls[0].arguments, [
-        { org: "my-org", per_page: 100 }
-      ]);
+      assert.equal(mockPaginate.mock.callCount(), 1);
+      assert.deepEqual(mockPaginate.mock.calls[0].arguments[1], { org: "my-org", per_page: 100 });
+    });
+
+    it("should return all members when more than 100 exist", async() => {
+      const manyMembers = Array.from({ length: 150 }, (_, i) => {
+        return { login: `user-${i}`, avatar_url: null };
+      });
+
+      const adapter = await setupOrgAdapter("my-org");
+      mockPaginate.mock.mockImplementationOnce(async() => manyMembers);
+      const result = await adapter.listMembers("my-org");
+
+      assert.equal(result.length, 150);
     });
 
     it("should return empty array for user namespace", async() => {
