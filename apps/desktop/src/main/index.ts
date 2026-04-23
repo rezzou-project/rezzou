@@ -3,7 +3,7 @@ import * as path from "node:path";
 import * as fs from "node:fs";
 
 // Import Third-party Dependencies
-import { app, BrowserWindow, shell, ipcMain, safeStorage, dialog } from "electron";
+import { app, BrowserWindow, shell, ipcMain, dialog } from "electron";
 import { ApiRepoContext, type Repo, type RepoDiff, type ProviderAdapter, type Provider, type Namespace } from "@rezzou/core";
 
 // Import Internal Dependencies
@@ -28,6 +28,7 @@ import { filterRegistry } from "./filter-registry.ts";
 import { loadPlugin, unregisterPluginByPath } from "./plugin-loader.ts";
 import { readPluginPaths, addPluginPath, removePluginPath, scanPluginsDir } from "./plugins-store.ts";
 import { readHistory, addHistoryEntry, type HistoryEntry } from "./history-store.ts";
+import { saveCredentials, loadSavedCredentials } from "./credentials-store.ts";
 
 interface AuthenticateOptions {
   token: string;
@@ -90,7 +91,6 @@ interface AddHistoryEntryPayload {
 }
 
 // CONSTANTS
-const kCredentialsFile = "credentials.json";
 const kGitHubClientId = import.meta.env.MAIN_VITE_GITHUB_CLIENT_ID as string;
 const kGitLabClientId = import.meta.env.MAIN_VITE_GITLAB_CLIENT_ID as string;
 
@@ -101,59 +101,6 @@ let pendingGitLabVerifier: string | null = null;
 let githubDeviceAbortController: AbortController | null = null;
 
 const loadedPlugins = new Map<string, LoadedPluginInfo>();
-
-function getCredentialsPath(): string {
-  return path.join(app.getPath("userData"), kCredentialsFile);
-}
-
-function saveCredentials(token: string, provider: Provider): void {
-  const credPath = getCredentialsPath();
-  let existing: Record<string, string> = {};
-
-  if (fs.existsSync(credPath)) {
-    try {
-      existing = JSON.parse(fs.readFileSync(credPath, "utf-8")) as Record<string, string>;
-    }
-    catch {
-      // ignore malformed file
-    }
-  }
-
-  const encrypted = safeStorage.encryptString(token).toString("base64");
-  fs.writeFileSync(credPath, JSON.stringify({ ...existing, [provider]: encrypted }));
-}
-
-function loadSavedCredentials(): { token: string; provider: Provider; }[] {
-  const credPath = getCredentialsPath();
-  if (!fs.existsSync(credPath)) {
-    return [];
-  }
-
-  try {
-    const raw = JSON.parse(fs.readFileSync(credPath, "utf-8")) as Record<string, string>;
-    const providers: Provider[] = ["github", "gitlab"];
-    const results: { token: string; provider: Provider; }[] = [];
-
-    for (const provider of providers) {
-      if (!raw[provider]) {
-        continue;
-      }
-
-      try {
-        const token = safeStorage.decryptString(Buffer.from(raw[provider], "base64"));
-        results.push({ token, provider });
-      }
-      catch {
-        // skip corrupted entry
-      }
-    }
-
-    return results;
-  }
-  catch {
-    return [];
-  }
-}
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -207,7 +154,7 @@ app.on("open-url", async(event, url) => {
     const token = await handleGitLabOAuthCallback(kGitLabClientId, code, verifier);
     const { adapter, namespaces } = await handleAuthenticate(token, "gitlab");
     adapters.set("gitlab", adapter);
-    saveCredentials(token, "gitlab");
+    saveCredentials(app.getPath("userData"), token, "gitlab");
     mainWindow?.webContents.send("oauth:authenticated", namespaces, "gitlab");
   }
   catch {
@@ -238,7 +185,7 @@ app.whenReady().then(async() => {
       .then(async(token) => {
         const { adapter, namespaces } = await handleAuthenticate(token, "github");
         adapters.set("github", adapter);
-        saveCredentials(token, "github");
+        saveCredentials(app.getPath("userData"), token, "github");
         githubDeviceAbortController = null;
         event.sender.send("oauth:authenticated", namespaces, "github");
       })
@@ -272,7 +219,7 @@ app.whenReady().then(async() => {
   });
 
   ipcMain.handle("auth:auto-login", async(): Promise<{ namespaces: Namespace[]; provider: Provider; }[] | null> => {
-    const saved = loadSavedCredentials();
+    const saved = loadSavedCredentials(app.getPath("userData"));
     if (saved.length === 0) {
       return null;
     }
@@ -298,7 +245,7 @@ app.whenReady().then(async() => {
     const { adapter, namespaces } = await handleAuthenticate(token, provider).catch(toError);
 
     adapters.set(provider, adapter);
-    saveCredentials(token, provider);
+    saveCredentials(app.getPath("userData"), token, provider);
 
     return namespaces;
   });
