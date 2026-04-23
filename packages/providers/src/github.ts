@@ -131,6 +131,7 @@ export class GitHubAdapter extends BaseProvider {
       branch: params.baseBranch
     });
 
+    let branchCreated = false;
     if (params.force) {
       try {
         await this.#client.git.updateRef({
@@ -148,6 +149,7 @@ export class GitHubAdapter extends BaseProvider {
           ref: `refs/heads/${params.headBranch}`,
           sha: baseBranch.commit.sha
         });
+        branchCreated = true;
       }
     }
     else {
@@ -157,44 +159,53 @@ export class GitHubAdapter extends BaseProvider {
         ref: `refs/heads/${params.headBranch}`,
         sha: baseBranch.commit.sha
       });
+      branchCreated = true;
     }
 
-    await this.#client.request("POST /graphql", {
-      query: kCreateCommitMutation,
-      variables: {
-        input: {
-          branch: {
-            repositoryNameWithOwner: params.repoPath,
-            branchName: params.headBranch
-          },
-          message: { headline: params.commitMessage },
-          fileChanges: {
-            additions: params.files.flatMap((file) => {
-              if (file.action === "delete") {
-                return [];
-              }
-
-              return [
-                {
-                  path: file.path,
-                  contents: Buffer.from(file.content).toString("base64")
+    try {
+      await this.#client.request("POST /graphql", {
+        query: kCreateCommitMutation,
+        variables: {
+          input: {
+            branch: {
+              repositoryNameWithOwner: params.repoPath,
+              branchName: params.headBranch
+            },
+            message: { headline: params.commitMessage },
+            fileChanges: {
+              additions: params.files.flatMap((file) => {
+                if (file.action === "delete") {
+                  return [];
                 }
-              ];
-            }),
-            deletions: params.files.flatMap((file) => {
-              if (file.action !== "delete") {
-                return [];
-              }
 
-              return [
-                { path: file.path }
-              ];
-            })
-          },
-          expectedHeadOid: baseBranch.commit.sha
+                return [
+                  {
+                    path: file.path,
+                    contents: Buffer.from(file.content).toString("base64")
+                  }
+                ];
+              }),
+              deletions: params.files.flatMap((file) => {
+                if (file.action !== "delete") {
+                  return [];
+                }
+
+                return [
+                  { path: file.path }
+                ];
+              })
+            },
+            expectedHeadOid: baseBranch.commit.sha
+          }
         }
+      });
+    }
+    catch (error) {
+      if (branchCreated) {
+        await this.#client.git.deleteRef({ owner, repo, ref: `heads/${params.headBranch}` }).catch(() => void 0);
       }
-    });
+      throw new Error(`Failed to commit changes to ${params.repoPath}`, { cause: error });
+    }
 
     const { data: pr } = await this.#client.pulls.create({
       owner,
@@ -203,6 +214,9 @@ export class GitHubAdapter extends BaseProvider {
       base: params.baseBranch,
       title: params.prTitle,
       body: params.prDescription
+    }).catch((error) => {
+      console.warn(`[rezzou] PR creation failed for ${params.repoPath}, branch ${params.headBranch} is ready for manual PR`);
+      throw new Error(`Failed to create pull request for ${params.repoPath}`, { cause: error });
     });
 
     if (params.reviewers && params.reviewers.length > 0) {

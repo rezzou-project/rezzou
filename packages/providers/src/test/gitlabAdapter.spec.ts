@@ -7,6 +7,8 @@ import assert from "node:assert/strict";
 const kToken = "test-token";
 
 const mockAllProjects = mock.fn(async() => ([] as unknown[]));
+const mockBranchesShow = mock.fn(async() => void 0);
+const mockBranchesRemove = mock.fn(async() => void 0);
 const mockShow = mock.fn(async() => {
   return {};
 });
@@ -28,6 +30,7 @@ mock.module("@gitbeaker/rest", {
     Gitlab: mock.fn(function MockGitlab() {
       return {
         Groups: { allProjects: mockAllProjects, all: mockGroupsAll },
+        Branches: { show: mockBranchesShow, remove: mockBranchesRemove },
         RepositoryFiles: { show: mockShow },
         Repositories: { allRepositoryTrees: mockAllRepositoryTrees },
         Commits: { create: mockCommitsCreate },
@@ -44,6 +47,8 @@ const { GitLabAdapter } = await import("../gitlab.ts");
 describe("GitLabAdapter", () => {
   beforeEach(() => {
     mockAllProjects.mock.resetCalls();
+    mockBranchesShow.mock.resetCalls();
+    mockBranchesRemove.mock.resetCalls();
     mockShow.mock.resetCalls();
     mockCommitsCreate.mock.resetCalls();
     mockMrCreate.mock.resetCalls();
@@ -370,6 +375,51 @@ describe("GitLabAdapter", () => {
         }),
         { message: "Unknown reviewer: ghost" }
       );
+    });
+
+    it("should remove the head branch when MR creation fails", async() => {
+      mockCommitsCreate.mock.mockImplementation(async() => undefined);
+      mockMrCreate.mock.mockImplementationOnce(async() => {
+        throw new Error("MR creation error");
+      });
+
+      const adapter = new GitLabAdapter(kToken);
+      const error = await adapter.submitChanges({
+        repoPath: "ns/repo",
+        baseBranch: "main",
+        headBranch: "rezzou/update",
+        commitMessage: "chore: update",
+        prTitle: "chore: update",
+        prDescription: "desc",
+        files: []
+      }).catch((err) => err);
+
+      assert.ok(error instanceof Error);
+      assert.equal(error.message, "Failed to create merge request for ns/repo");
+      assert.equal(mockBranchesRemove.mock.callCount(), 1);
+      assert.deepEqual(mockBranchesRemove.mock.calls[0].arguments, ["ns/repo", "rezzou/update"]);
+    });
+
+    it("should preserve the original error as cause when MR creation fails", async() => {
+      mockCommitsCreate.mock.mockImplementation(async() => undefined);
+      const originalError = new Error("MR creation error");
+      mockMrCreate.mock.mockImplementationOnce(async() => {
+        throw originalError;
+      });
+
+      const adapter = new GitLabAdapter(kToken);
+      const error = await adapter.submitChanges({
+        repoPath: "ns/repo",
+        baseBranch: "main",
+        headBranch: "rezzou/update",
+        commitMessage: "chore: update",
+        prTitle: "chore: update",
+        prDescription: "desc",
+        files: []
+      }).catch((err) => err);
+
+      assert.ok(error instanceof Error);
+      assert.strictEqual(error.cause, originalError);
     });
   });
 
