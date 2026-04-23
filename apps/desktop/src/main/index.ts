@@ -6,6 +6,7 @@ import * as fs from "node:fs";
 import { app, BrowserWindow, shell, ipcMain, dialog } from "electron";
 import {
   ApiRepoContext,
+  RezzouError,
   type Repo,
   type RepoDiff,
   type ProviderAdapter,
@@ -105,7 +106,11 @@ function getAdapter(provider: Provider): ProviderAdapter {
   return adapter;
 }
 
-function toError(err: unknown): never {
+function serializeError(err: unknown): never {
+  if (err instanceof RezzouError) {
+    throw new Error(JSON.stringify({ code: err.code, message: err.message, details: err.details }));
+  }
+
   throw new Error(err instanceof Error ? err.message : String(err));
 }
 
@@ -218,7 +223,7 @@ app.whenReady().then(async() => {
   ipcMain.handle(IpcChannels.AuthAuthenticate, async(_event, payload: AuthenticateOptions): Promise<Namespace[]> => {
     const { token, provider } = payload;
 
-    const { adapter, namespaces } = await handleAuthenticate(token, provider).catch(toError);
+    const { adapter, namespaces } = await handleAuthenticate(token, provider).catch(serializeError);
 
     adapters.set(provider, adapter);
     saveCredentials(app.getPath("userData"), token, provider);
@@ -229,7 +234,7 @@ app.whenReady().then(async() => {
   ipcMain.handle(IpcChannels.AuthLoadRepos, async(_event, payload: LoadReposPayload): Promise<Repo[]> => {
     const { namespace, provider } = payload;
 
-    return handleLoadRepos(getAdapter(provider), namespace).catch(toError);
+    return handleLoadRepos(getAdapter(provider), namespace).catch(serializeError);
   });
 
   ipcMain.handle(IpcChannels.EngineScanRepos, async(_event, payload: ScanReposPayload): Promise<RepoDiff[]> => {
@@ -239,20 +244,20 @@ app.whenReady().then(async() => {
       getAdapter(provider),
       repos,
       { operationId, inputs }
-    ).catch(toError);
+    ).catch(serializeError);
   });
 
   ipcMain.handle(IpcChannels.EngineApplyDiff, async(_event, payload: ApplyDiffPayload) => {
     const { provider, ...options } = payload;
 
-    return handleApplyDiff(getAdapter(provider), options).catch(toError);
+    return handleApplyDiff(getAdapter(provider), options).catch(serializeError);
   });
 
   ipcMain.handle(IpcChannels.EngineCheckBranchConflicts,
     async(_event, payload: CheckBranchConflictsPayload): Promise<string[]> => {
       const { repoPaths, branchName, provider } = payload;
 
-      return handleCheckBranchConflicts(getAdapter(provider), { repoPaths, branchName }).catch(toError);
+      return handleCheckBranchConflicts(getAdapter(provider), { repoPaths, branchName }).catch(serializeError);
     });
 
   ipcMain.handle(IpcChannels.EngineListOperations, () => listOperations());
@@ -278,7 +283,7 @@ app.whenReady().then(async() => {
 
   ipcMain.handle(IpcChannels.PluginLoad, async(_event, payload: LoadPluginPayload): Promise<PluginInfo> => {
     const { filePath } = payload;
-    const plugin = await loadPlugin(filePath).catch(toError);
+    const plugin = await loadPlugin(filePath).catch(serializeError);
     loadedPlugins.set(filePath, {
       id: plugin.id,
       name: plugin.name,
@@ -300,7 +305,7 @@ app.whenReady().then(async() => {
       return null;
     }
     const filePath = filePaths[0];
-    const plugin = await loadPlugin(filePath).catch(toError);
+    const plugin = await loadPlugin(filePath).catch(serializeError);
     addPluginPath(filePath);
     loadedPlugins.set(filePath, {
       id: plugin.id,
@@ -329,7 +334,7 @@ app.whenReady().then(async() => {
   ipcMain.handle(IpcChannels.PluginReload, async(_event, payload: ReloadPluginPayload): Promise<PluginInfo> => {
     const { filePath } = payload;
     unregisterPluginByPath(filePath);
-    const plugin = await loadPlugin(filePath).catch(toError);
+    const plugin = await loadPlugin(filePath).catch(serializeError);
     const existing = loadedPlugins.get(filePath);
     const info: LoadedPluginInfo = {
       id: plugin.id,
@@ -353,7 +358,7 @@ app.whenReady().then(async() => {
   ipcMain.handle(IpcChannels.EngineFetchMembers, async(_event, payload: FetchMembersPayload) => {
     const { namespace, provider } = payload;
 
-    return handleFetchMembers(getAdapter(provider), namespace).catch(toError);
+    return handleFetchMembers(getAdapter(provider), namespace).catch(serializeError);
   });
 
   ipcMain.handle(IpcChannels.HistoryList, () => readHistory());
@@ -365,7 +370,7 @@ app.whenReady().then(async() => {
   ipcMain.handle(IpcChannels.EngineGetRepoStats, async(_event, payload: GetRepoStatsPayload) => {
     const { repoPath, provider } = payload;
 
-    return handleGetRepoStats(getAdapter(provider), repoPath).catch(toError);
+    return handleGetRepoStats(getAdapter(provider), repoPath).catch(serializeError);
   });
 
   const persistedPaths = readPluginPaths();

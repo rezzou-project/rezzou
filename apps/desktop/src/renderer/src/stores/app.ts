@@ -7,23 +7,53 @@ import type {
   RepoDiff as BaseRepoDiff,
   SubmitResult,
   OperationOverrides,
-  RepoStats
+  RepoStats,
+  RezzouErrorCode
 } from "@rezzou/core";
+
+// Import Internal Dependencies
+import type { SerializedRezzouError } from "../../../shared/ipc-channels.ts";
 
 // CONSTANTS
 const kConcurrency = 5;
 const kApplyConcurrency = 4;
+const kElectronIpcPrefix = /^Error invoking remote method '[^']+': (?:\w+: )?/;
+const kRezzouErrorCodes = new Set<RezzouErrorCode>([
+  "rate-limit", "permission", "conflict", "network", "not-found", "unknown"
+]);
 
 let applyAllAbortController: AbortController | null = null;
 
 type Step = "connect" | "home" | "repos" | "pick-operation" | "diffs" | "results" | "plugins" | "history";
 
-function ipcErrorMessage(error: unknown, fallback: string): string {
+interface ParsedIpcError {
+  code: RezzouErrorCode | null;
+  message: string;
+}
+
+function parseIpcError(error: unknown, fallback: string): ParsedIpcError {
   if (!(error instanceof Error)) {
-    return fallback;
+    return { code: null, message: fallback };
   }
 
-  return error.message.replace(/^Error invoking remote method '[^']+': (?:\w+: )?/, "") || fallback;
+  const stripped = error.message.replace(kElectronIpcPrefix, "");
+
+  if (stripped.startsWith("{")) {
+    try {
+      const parsed: unknown = JSON.parse(stripped);
+      if (parsed !== null && typeof parsed === "object") {
+        const { code, message } = parsed as Partial<SerializedRezzouError>;
+        if (typeof code === "string" && kRezzouErrorCodes.has(code as RezzouErrorCode) && typeof message === "string") {
+          return { code: code as RezzouErrorCode, message: message || fallback };
+        }
+      }
+    }
+    catch {
+      // not a structured RezzouError — fall through
+    }
+  }
+
+  return { code: null, message: stripped || fallback };
 }
 
 export const applyStatus = {
@@ -41,6 +71,7 @@ export interface RepoDiff extends BaseRepoDiff {
   applyStatus: ApplyStatus;
   prUrl?: string;
   error?: string;
+  errorCode?: RezzouErrorCode;
 }
 
 export type RepoStatsEntry = RepoStats | null | "loading";
@@ -166,7 +197,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
       catch (authenticateError) {
         set({
           isLoading: false,
-          error: ipcErrorMessage(authenticateError, "Failed to connect")
+          error: parseIpcError(authenticateError, "Failed to connect").message
         });
       }
     },
@@ -220,7 +251,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
       catch (loadReposError) {
         set({
           isLoading: false,
-          error: ipcErrorMessage(loadReposError, "Failed to load repositories")
+          error: parseIpcError(loadReposError, "Failed to load repositories").message
         });
       }
     },
@@ -439,7 +470,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
         set({ step: "diffs", diffs, isLoading: false });
       }
       catch (scanError) {
-        set({ isLoading: false, error: ipcErrorMessage(scanError, "Failed to scan repositories") });
+        set({ isLoading: false, error: parseIpcError(scanError, "Failed to scan repositories").message });
       }
     },
 
@@ -493,12 +524,14 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
         });
       }
       catch (applyError) {
+        const { code, message } = parseIpcError(applyError, "Failed to create PR");
         set((state) => {
           const updatedDiffs = [...state.diffs];
           updatedDiffs[diffIndex] = {
             ...diff,
             applyStatus: applyStatus.Error,
-            error: ipcErrorMessage(applyError, "Failed to create PR")
+            error: message,
+            errorCode: code ?? void 0
           };
 
           return { diffs: updatedDiffs };

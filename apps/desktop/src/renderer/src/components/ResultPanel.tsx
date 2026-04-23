@@ -61,7 +61,9 @@ export function ResultPanel() {
               >
                 <span className="text-sm font-medium">{diff.repo.name}</span>
                 {diff.error !== undefined && (
-                  <p className="mt-1 text-xs text-red-400">{diff.error}</p>
+                  <p className={`mt-1 text-xs ${diff.errorCode === "rate-limit" ? "text-orange-400" : "text-red-400"}`}>
+                    {diff.error}
+                  </p>
                 )}
               </div>
             ))}
