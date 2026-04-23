@@ -9,58 +9,20 @@ import type {
   Member,
   OperationDefaults,
   OperationOverrides,
-  RepoStats,
-  InputField
+  RepoStats
 } from "@rezzou/core";
 
-interface OperationInfo {
-  id: string;
-  name: string;
-  description: string;
-  inputs?: readonly InputField[];
-}
-
-interface PluginInfo {
-  id: string;
-  name: string;
-  version: string;
-}
-
-interface FilterInfo {
-  id: string;
-  name: string;
-  description?: string;
-}
-
-interface HistoryEntryResult {
-  repoName: string;
-  repoFullPath: string;
-  status: "done" | "error";
-  prUrl?: string;
-  error?: string;
-}
-
-interface HistoryEntry {
-  id: string;
-  timestamp: number;
-  operationId: string;
-  namespace: string;
-  results: HistoryEntryResult[];
-}
-
-interface RecordRunPayload {
-  operationId: string;
-  namespace: string;
-  results: HistoryEntryResult[];
-}
-
-interface LoadedPluginInfo {
-  id: string;
-  name: string;
-  version: string;
-  filePath: string;
-  source: "persisted" | "auto-scanned";
-}
+// Import Internal Dependencies
+import {
+  IpcChannels,
+  type IpcApi,
+  type OperationInfo,
+  type PluginInfo,
+  type FilterInfo,
+  type HistoryEntry,
+  type RecordRunPayload,
+  type LoadedPluginInfo
+} from "../shared/ipc-channels.ts";
 
 contextBridge.exposeInMainWorld("versions", {
   electron: process.versions.electron,
@@ -71,18 +33,18 @@ contextBridge.exposeInMainWorld("api", {
   authenticate: (
     token: string,
     provider: Provider
-  ): Promise<Namespace[]> => ipcRenderer.invoke("auth:authenticate", { token, provider }),
+  ): Promise<Namespace[]> => ipcRenderer.invoke(IpcChannels.AuthAuthenticate, { token, provider }),
 
   loadRepos: (
     namespace: string,
     provider: Provider
-  ): Promise<Repo[]> => ipcRenderer.invoke("auth:loadRepos", { namespace, provider }),
+  ): Promise<Repo[]> => ipcRenderer.invoke(IpcChannels.AuthLoadRepos, { namespace, provider }),
 
   scanRepos: (
     repos: Repo[],
     operationId: string,
     options: { inputs: Record<string, unknown>; provider: Provider; }
-  ): Promise<RepoDiff[]> => ipcRenderer.invoke("engine:scanRepos", { repos, operationId, ...options }),
+  ): Promise<RepoDiff[]> => ipcRenderer.invoke(IpcChannels.EngineScanRepos, { repos, operationId, ...options }),
 
   applyDiff: (
     diff: RepoDiff,
@@ -93,41 +55,41 @@ contextBridge.exposeInMainWorld("api", {
       force?: boolean;
       provider: Provider;
     }
-  ): Promise<SubmitResult> => ipcRenderer.invoke("engine:applyDiff", { diff, ...options }),
+  ): Promise<SubmitResult> => ipcRenderer.invoke(IpcChannels.EngineApplyDiff, { diff, ...options }),
 
   checkBranchConflicts: (
     repoPaths: string[],
     branchName: string,
     provider: Provider
-  ): Promise<string[]> => ipcRenderer.invoke("engine:checkBranchConflicts", { repoPaths, branchName, provider }),
+  ): Promise<string[]> => ipcRenderer.invoke(IpcChannels.EngineCheckBranchConflicts, { repoPaths, branchName, provider }),
 
-  listOperations: () => ipcRenderer.invoke("engine:listOperations"),
+  listOperations: (): Promise<OperationInfo[]> => ipcRenderer.invoke(IpcChannels.EngineListOperations),
 
   getOperationDefaults: (
     operationId: string,
     inputs: Record<string, unknown>
-  ): Promise<OperationDefaults> => ipcRenderer.invoke("engine:getOperationDefaults", { operationId, inputs }),
+  ): Promise<OperationDefaults> => ipcRenderer.invoke(IpcChannels.EngineGetOperationDefaults, { operationId, inputs }),
 
   fetchMembers: (
     namespace: string,
     provider: Provider
-  ): Promise<Member[]> => ipcRenderer.invoke("engine:fetchMembers", { namespace, provider }),
+  ): Promise<Member[]> => ipcRenderer.invoke(IpcChannels.EngineFetchMembers, { namespace, provider }),
 
   getRepoStats: (
     repoPath: string,
     provider: Provider
-  ): Promise<RepoStats> => ipcRenderer.invoke("engine:getRepoStats", { repoPath, provider }),
+  ): Promise<RepoStats> => ipcRenderer.invoke(IpcChannels.EngineGetRepoStats, { repoPath, provider }),
 
-  autoLogin: (): Promise<{ namespaces: Namespace[]; provider: Provider; }[] | null> => ipcRenderer.invoke("auth:auto-login"),
+  autoLogin: (): ReturnType<IpcApi["autoLogin"]> => ipcRenderer.invoke(IpcChannels.AuthAutoLogin),
 
   startGitHubOAuth: (): Promise<{
     user_code: string;
     verification_uri: string;
-  }> => ipcRenderer.invoke("oauth:github-device-start"),
+  }> => ipcRenderer.invoke(IpcChannels.OAuthGitHubDeviceStart),
 
-  startGitLabOAuth: (): Promise<void> => ipcRenderer.invoke("oauth:gitlab-start"),
+  startGitLabOAuth: (): Promise<void> => ipcRenderer.invoke(IpcChannels.OAuthGitLabStart),
 
-  cancelOAuth: (): Promise<void> => ipcRenderer.invoke("oauth:cancel"),
+  cancelOAuth: (): Promise<void> => ipcRenderer.invoke(IpcChannels.OAuthCancel),
 
   onOAuthAuthenticated: (
     callback: (namespaces: Namespace[], provider: Provider) => void
@@ -135,18 +97,18 @@ contextBridge.exposeInMainWorld("api", {
     function listener(_event: unknown, namespaces: Namespace[], provider: Provider) {
       callback(namespaces, provider);
     }
-    ipcRenderer.on("oauth:authenticated", listener);
+    ipcRenderer.on(IpcChannels.OAuthAuthenticated, listener);
 
-    return () => ipcRenderer.removeListener("oauth:authenticated", listener);
+    return () => ipcRenderer.removeListener(IpcChannels.OAuthAuthenticated, listener);
   },
 
   onOAuthError: (callback: (message: string) => void): (() => void) => {
     function listener(_event: unknown, message: string) {
       callback(message);
     }
-    ipcRenderer.on("oauth:error", listener);
+    ipcRenderer.on(IpcChannels.OAuthError, listener);
 
-    return () => ipcRenderer.removeListener("oauth:error", listener);
+    return () => ipcRenderer.removeListener(IpcChannels.OAuthError, listener);
   },
 
   onOperationsChanged: (
@@ -155,22 +117,22 @@ contextBridge.exposeInMainWorld("api", {
     function listener(_event: unknown, ops: OperationInfo[]) {
       callback(ops);
     }
-    ipcRenderer.on("registry:operationsChanged", listener);
+    ipcRenderer.on(IpcChannels.RegistryOperationsChanged, listener);
 
-    return () => ipcRenderer.removeListener("registry:operationsChanged", listener);
+    return () => ipcRenderer.removeListener(IpcChannels.RegistryOperationsChanged, listener);
   },
 
-  loadPlugin: (filePath: string): Promise<PluginInfo> => ipcRenderer.invoke("plugin:load", { filePath }),
+  loadPlugin: (filePath: string): Promise<PluginInfo> => ipcRenderer.invoke(IpcChannels.PluginLoad, { filePath }),
 
-  pickAndLoadPlugin: (): Promise<PluginInfo | null> => ipcRenderer.invoke("plugin:pick-and-load"),
+  pickAndLoadPlugin: (): Promise<PluginInfo | null> => ipcRenderer.invoke(IpcChannels.PluginPickAndLoad),
 
-  getMissingPlugins: (): Promise<string[]> => ipcRenderer.invoke("plugin:getMissing"),
+  getMissingPlugins: (): Promise<string[]> => ipcRenderer.invoke(IpcChannels.PluginGetMissing),
 
-  listPlugins: (): Promise<LoadedPluginInfo[]> => ipcRenderer.invoke("plugin:list"),
+  listPlugins: (): Promise<LoadedPluginInfo[]> => ipcRenderer.invoke(IpcChannels.PluginList),
 
-  unloadPlugin: (filePath: string): Promise<void> => ipcRenderer.invoke("plugin:unload", { filePath }),
+  unloadPlugin: (filePath: string): Promise<void> => ipcRenderer.invoke(IpcChannels.PluginUnload, { filePath }),
 
-  reloadPlugin: (filePath: string): Promise<PluginInfo> => ipcRenderer.invoke("plugin:reload", { filePath }),
+  reloadPlugin: (filePath: string): Promise<PluginInfo> => ipcRenderer.invoke(IpcChannels.PluginReload, { filePath }),
 
   onPluginsChanged: (
     callback: (plugins: LoadedPluginInfo[]) => void
@@ -178,18 +140,18 @@ contextBridge.exposeInMainWorld("api", {
     function listener(_event: unknown, plugins: LoadedPluginInfo[]) {
       callback(plugins);
     }
-    ipcRenderer.on("registry:pluginsChanged", listener);
+    ipcRenderer.on(IpcChannels.RegistryPluginsChanged, listener);
 
-    return () => ipcRenderer.removeListener("registry:pluginsChanged", listener);
+    return () => ipcRenderer.removeListener(IpcChannels.RegistryPluginsChanged, listener);
   },
 
-  listFilters: (): Promise<FilterInfo[]> => ipcRenderer.invoke("engine:listFilters"),
+  listFilters: (): Promise<FilterInfo[]> => ipcRenderer.invoke(IpcChannels.EngineListFilters),
 
   filterRepos: (
     repos: Repo[],
     filterIds: string[],
     provider: Provider
-  ): Promise<string[]> => ipcRenderer.invoke("engine:filterRepos", { repos, filterIds, provider }),
+  ): Promise<string[]> => ipcRenderer.invoke(IpcChannels.EngineFilterRepos, { repos, filterIds, provider }),
 
   onFiltersChanged: (
     callback: (filters: FilterInfo[]) => void
@@ -197,12 +159,12 @@ contextBridge.exposeInMainWorld("api", {
     function listener(_event: unknown, filters: FilterInfo[]) {
       callback(filters);
     }
-    ipcRenderer.on("registry:filtersChanged", listener);
+    ipcRenderer.on(IpcChannels.RegistryFiltersChanged, listener);
 
-    return () => ipcRenderer.removeListener("registry:filtersChanged", listener);
+    return () => ipcRenderer.removeListener(IpcChannels.RegistryFiltersChanged, listener);
   },
 
-  listHistory: (): Promise<HistoryEntry[]> => ipcRenderer.invoke("history:list"),
+  listHistory: (): Promise<HistoryEntry[]> => ipcRenderer.invoke(IpcChannels.HistoryList),
 
-  recordRun: (payload: RecordRunPayload): Promise<void> => ipcRenderer.invoke("history:record", payload)
+  recordRun: (payload: RecordRunPayload): Promise<void> => ipcRenderer.invoke(IpcChannels.HistoryRecord, payload)
 });

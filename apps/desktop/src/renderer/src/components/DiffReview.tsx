@@ -5,6 +5,7 @@ import { useState, useRef, useEffect } from "react";
 import { useAppStore } from "../stores/app.js";
 import type { RepoDiff } from "../stores/app.js";
 import type { Member, Patch } from "@rezzou/core";
+import type { OperationInfo } from "../../../shared/ipc-channels.ts";
 
 // CONSTANTS
 const kContextLines = 2;
@@ -472,12 +473,6 @@ function BranchConflictModal() {
       </div>
     </div>
   );
-}
-
-interface OperationInfo {
-  id: string;
-  name: string;
-  description: string;
 }
 
 export function DiffReview() {

@@ -4,11 +4,10 @@ import * as events from "node:events";
 // Import Third-party Dependencies
 import type { RepoFilter } from "@rezzou/core";
 
-export interface FilterInfo {
-  id: string;
-  name: string;
-  description?: string;
-}
+// Import Internal Dependencies
+import type { FilterInfo } from "../shared/ipc-channels.ts";
+
+export type { FilterInfo };
 
 class FilterRegistry extends events.EventEmitter {
   #filters = new Map<string, RepoFilter>();

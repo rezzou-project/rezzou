@@ -4,26 +4,13 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import { randomUUID } from "node:crypto";
 
+// Import Internal Dependencies
+import type { HistoryEntry, RecordRunPayload } from "../shared/ipc-channels.ts";
+
 // CONSTANTS
 const kRezzouDir = path.join(os.homedir(), ".rezzou");
 const kHistoryFile = path.join(kRezzouDir, "history.json");
 const kMaxEntries = 100;
-
-export interface HistoryEntryResult {
-  repoName: string;
-  repoFullPath: string;
-  status: "done" | "error";
-  prUrl?: string;
-  error?: string;
-}
-
-export interface HistoryEntry {
-  id: string;
-  timestamp: number;
-  operationId: string;
-  namespace: string;
-  results: HistoryEntryResult[];
-}
 
 export function readHistory(): HistoryEntry[] {
   if (!fs.existsSync(kHistoryFile)) {
@@ -46,12 +33,6 @@ export function addHistoryEntry(entry: HistoryEntry): void {
   }
   fs.mkdirSync(kRezzouDir, { recursive: true });
   fs.writeFileSync(kHistoryFile, JSON.stringify(entries, null, 2));
-}
-
-export interface RecordRunPayload {
-  operationId: string;
-  namespace: string;
-  results: HistoryEntryResult[];
 }
 
 export function recordRun(payload: RecordRunPayload): void {

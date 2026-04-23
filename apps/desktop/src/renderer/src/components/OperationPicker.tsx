@@ -1,18 +1,11 @@
 // Import Third-party Dependencies
 import { useState, useEffect } from "react";
-import type { InputField } from "@rezzou/core";
 
 // Import Internal Dependencies
 import { useAppStore } from "../stores/app.js";
 import { InputsForm } from "./InputsForm.js";
 import { getDefaultValues } from "../utils/inputsForm.js";
-
-interface OperationInfo {
-  id: string;
-  name: string;
-  description: string;
-  inputs?: readonly InputField[];
-}
+import type { OperationInfo } from "../../../shared/ipc-channels.ts";
 
 export function OperationPicker() {
   const [operations, setOperations] = useState<OperationInfo[]>([]);

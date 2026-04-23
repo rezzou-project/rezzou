@@ -11,7 +11,12 @@ import {
   renameFilePlugin,
   replacePatternPlugin
 } from "@rezzou/plugins";
-import type { Operation, InputField } from "@rezzou/core";
+import type { Operation } from "@rezzou/core";
+
+// Import Internal Dependencies
+import type { OperationInfo } from "../shared/ipc-channels.ts";
+
+export type { OperationInfo };
 
 const kBuiltinOperations = [
   licenseYearPlugin,
@@ -22,13 +27,6 @@ const kBuiltinOperations = [
   renameFilePlugin,
   replacePatternPlugin]
   .flatMap((plugin) => plugin.operations);
-
-export interface OperationInfo {
-  id: string;
-  name: string;
-  description: string;
-  inputs?: readonly InputField[];
-}
 
 class OperationRegistry extends events.EventEmitter {
   #operations = new Map<string, Operation>(
