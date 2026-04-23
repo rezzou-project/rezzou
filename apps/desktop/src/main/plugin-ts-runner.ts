@@ -2,7 +2,16 @@
 import * as url from "node:url";
 
 // Import Third-party Dependencies
-import { parsePlugin, type Operation, type RepoContext, type RepoFilter, type Repo, type Provider } from "@rezzou/sdk";
+import {
+  parsePlugin,
+  type Operation,
+  type RepoContext,
+  type RepoFilter,
+  type Repo,
+  type Provider,
+  type ProviderAdapter,
+  type ProviderDescriptor
+} from "@rezzou/sdk";
 
 interface CallPending {
   resolve: (value: unknown) => void;
@@ -38,6 +47,21 @@ interface CallOperationStringMessage {
   inputs: Record<string, unknown>;
 }
 
+interface CreateProviderMessage {
+  type: "create-provider";
+  callId: string;
+  provider: string;
+  token: string;
+}
+
+interface CallAdapterMessage {
+  type: "call-adapter";
+  callId: string;
+  adapterKey: string;
+  method: string;
+  args: unknown[];
+}
+
 interface CtxResponseMessage {
   type: "ctx-response";
   ctxCallId: string;
@@ -59,11 +83,15 @@ type IncomingMessage =
   | CallApplyMessage
   | CallFilterTestMessage
   | CallOperationStringMessage
+  | CreateProviderMessage
+  | CallAdapterMessage
   | CtxResponseMessage;
 
 let plugin: ReturnType<typeof parsePlugin> | null = null;
 const pendingCtxCalls = new Map<string, CallPending>();
+const createdAdapters = new Map<string, ProviderAdapter>();
 let ctxCallIdCounter = 0;
+let adapterKeyCounter = 0;
 
 function createContextProxy(callId: string, repo: Repo, provider: Provider): RepoContext {
   function proxyCall(method: "readFile" | "listFiles" | "exists", args: unknown[]): Promise<unknown> {
@@ -127,6 +155,12 @@ async function handleMessage(msg: IncomingMessage): Promise<void> {
             id: filter.id,
             name: filter.name,
             description: filter.description
+          };
+        }),
+        providers: (plugin.providers ?? []).map((descriptor: ProviderDescriptor) => {
+          return {
+            provider: descriptor.provider,
+            name: descriptor.name
           };
         })
       };
@@ -232,6 +266,52 @@ async function handleMessage(msg: IncomingMessage): Promise<void> {
     await callOperationStringFn({
       callId: msg.callId, operationId: msg.operationId, fnName: "prDescription", inputs: msg.inputs
     });
+
+    return;
+  }
+
+  if (msg.type === "create-provider") {
+    const descriptor = plugin.providers?.find(
+      (d: ProviderDescriptor) => d.provider === msg.provider
+    );
+    if (!descriptor) {
+      process.send!({ type: "call-error", callId: msg.callId, error: `Provider not found: ${msg.provider}` });
+
+      return;
+    }
+    try {
+      const adapter = await Promise.resolve(descriptor.create(msg.token));
+      const adapterKey = `adapter-${adapterKeyCounter++}`;
+      createdAdapters.set(adapterKey, adapter);
+      process.send!({ type: "call-result", callId: msg.callId, value: adapterKey });
+    }
+    catch (error) {
+      process.send!({ type: "call-error", callId: msg.callId, error: String(error) });
+    }
+
+    return;
+  }
+
+  if (msg.type === "call-adapter") {
+    const adapter = createdAdapters.get(msg.adapterKey);
+    if (!adapter) {
+      process.send!({ type: "call-error", callId: msg.callId, error: `Adapter not found: ${msg.adapterKey}` });
+
+      return;
+    }
+    try {
+      const method = adapter[msg.method as keyof ProviderAdapter];
+      if (typeof method !== "function") {
+        process.send!({ type: "call-error", callId: msg.callId, error: `Not a method: ${msg.method}` });
+
+        return;
+      }
+      const value = await (method as (...args: unknown[]) => Promise<unknown>).call(adapter, ...msg.args);
+      process.send!({ type: "call-result", callId: msg.callId, value });
+    }
+    catch (error) {
+      process.send!({ type: "call-error", callId: msg.callId, error: String(error) });
+    }
   }
 }
 

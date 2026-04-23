@@ -1,4 +1,4 @@
-export type Provider = "gitlab" | "github";
+export type Provider = string;
 export type NamespaceType = "org" | "user";
 
 export interface Namespace {
@@ -131,6 +131,12 @@ export interface ProviderAdapter {
   submitChanges(params: SubmitParams): Promise<SubmitResult>;
   listMembers(namespace: string): Promise<Member[]>;
   getRepoStats(repoPath: string): Promise<RepoStats>;
+}
+
+export interface ProviderDescriptor {
+  readonly provider: string;
+  readonly name: string;
+  readonly create: (token: string) => ProviderAdapter | Promise<ProviderAdapter>;
 }
 
 export interface RepoDiff {

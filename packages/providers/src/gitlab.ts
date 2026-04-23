@@ -7,7 +7,7 @@ import { BaseProvider } from "./base.ts";
 import { mapProviderError } from "./errors.ts";
 
 export class GitLabAdapter extends BaseProvider {
-  readonly provider = "gitlab" as const;
+  readonly provider = "gitlab";
   #client: InstanceType<typeof Gitlab>;
 
   constructor(token: string) {

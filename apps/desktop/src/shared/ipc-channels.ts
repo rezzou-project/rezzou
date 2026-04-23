@@ -44,10 +44,13 @@ export const IpcChannels = {
   // History
   HistoryList: "history:list",
   HistoryRecord: "history:record",
+  // Provider
+  ProviderList: "provider:list",
   // Registry events (main → renderer)
   RegistryPluginsChanged: "registry:pluginsChanged",
   RegistryOperationsChanged: "registry:operationsChanged",
-  RegistryFiltersChanged: "registry:filtersChanged"
+  RegistryFiltersChanged: "registry:filtersChanged",
+  RegistryProvidersChanged: "registry:providersChanged"
 } as const;
 
 export interface SerializedRezzouError {
@@ -147,6 +150,11 @@ export interface FilterInfo {
   description?: string;
 }
 
+export interface ProviderInfo {
+  provider: string;
+  name: string;
+}
+
 export interface HistoryEntryResult {
   repoName: string;
   repoFullPath: string;
@@ -209,4 +217,6 @@ export interface IpcApi {
   onFiltersChanged(callback: (filters: FilterInfo[]) => void): () => void;
   listHistory(): Promise<HistoryEntry[]>;
   recordRun(payload: RecordRunPayload): Promise<void>;
+  listProviders(): Promise<ProviderInfo[]>;
+  onProvidersChanged(callback: (providers: ProviderInfo[]) => void): () => void;
 }

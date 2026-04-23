@@ -2,11 +2,9 @@
 import * as crypto from "node:crypto";
 
 // Import Third-party Dependencies
-import { GitLabAdapter, GitHubAdapter } from "@rezzou/providers";
 import {
   scanRepos,
   applyRepoDiff,
-  type Provider,
   type Namespace,
   type Repo,
   type RepoDiff,
@@ -19,6 +17,7 @@ import {
 } from "@rezzou/core";
 
 // Import Internal Dependencies
+import { providerRegistry } from "./provider-registry.ts";
 import { getOperation } from "./operation-registry.ts";
 
 // CONSTANTS
@@ -33,11 +32,13 @@ const kSlowDownIncrement = 5;
 
 export async function handleAuthenticate(
   token: string,
-  provider: Provider
+  provider: string
 ): Promise<{ adapter: ProviderAdapter; namespaces: Namespace[]; }> {
-  const adapter = provider === "github"
-    ? new GitHubAdapter(token)
-    : new GitLabAdapter(token);
+  const descriptor = providerRegistry.get(provider);
+  if (!descriptor) {
+    throw new Error(`Unknown provider: "${provider}"`);
+  }
+  const adapter = await Promise.resolve(descriptor.create(token));
   const namespaces = await adapter.listNamespaces();
 
   return { adapter, namespaces };

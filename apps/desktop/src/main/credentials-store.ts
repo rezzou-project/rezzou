@@ -4,12 +4,11 @@ import * as fs from "node:fs";
 
 // Import Third-party Dependencies
 import { safeStorage } from "electron";
-import type { Provider } from "@rezzou/core";
 
 // CONSTANTS
 const kCredentialsFile = "credentials.json";
 
-export function saveCredentials(dataPath: string, token: string, provider: Provider): void {
+export function saveCredentials(dataPath: string, token: string, provider: string): void {
   if (!safeStorage.isEncryptionAvailable()) {
     throw new Error("Encryption is not available on this system. Token cannot be persisted securely.");
   }
@@ -30,7 +29,7 @@ export function saveCredentials(dataPath: string, token: string, provider: Provi
   fs.writeFileSync(credPath, JSON.stringify({ ...existing, [provider]: encrypted }));
 }
 
-export function loadSavedCredentials(dataPath: string): { token: string; provider: Provider; }[] {
+export function loadSavedCredentials(dataPath: string): { token: string; provider: string; }[] {
   const credPath = path.join(dataPath, kCredentialsFile);
   if (!fs.existsSync(credPath)) {
     return [];
@@ -38,14 +37,9 @@ export function loadSavedCredentials(dataPath: string): { token: string; provide
 
   try {
     const raw = JSON.parse(fs.readFileSync(credPath, "utf-8")) as Record<string, string>;
-    const providers: Provider[] = ["github", "gitlab"];
-    const results: { token: string; provider: Provider; }[] = [];
+    const results: { token: string; provider: string; }[] = [];
 
-    for (const provider of providers) {
-      if (!raw[provider]) {
-        continue;
-      }
-
+    for (const provider of Object.keys(raw)) {
       try {
         const token = safeStorage.decryptString(Buffer.from(raw[provider], "base64"));
         results.push({ token, provider });

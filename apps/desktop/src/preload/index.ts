@@ -21,7 +21,8 @@ import {
   type FilterInfo,
   type HistoryEntry,
   type RecordRunPayload,
-  type LoadedPluginInfo
+  type LoadedPluginInfo,
+  type ProviderInfo
 } from "../shared/ipc-channels.ts";
 
 contextBridge.exposeInMainWorld("versions", {
@@ -166,5 +167,18 @@ contextBridge.exposeInMainWorld("api", {
 
   listHistory: (): Promise<HistoryEntry[]> => ipcRenderer.invoke(IpcChannels.HistoryList),
 
-  recordRun: (payload: RecordRunPayload): Promise<void> => ipcRenderer.invoke(IpcChannels.HistoryRecord, payload)
+  recordRun: (payload: RecordRunPayload): Promise<void> => ipcRenderer.invoke(IpcChannels.HistoryRecord, payload),
+
+  listProviders: (): Promise<ProviderInfo[]> => ipcRenderer.invoke(IpcChannels.ProviderList),
+
+  onProvidersChanged: (
+    callback: (providers: ProviderInfo[]) => void
+  ): (() => void) => {
+    function listener(_event: unknown, providers: ProviderInfo[]) {
+      callback(providers);
+    }
+    ipcRenderer.on(IpcChannels.RegistryProvidersChanged, listener);
+
+    return () => ipcRenderer.removeListener(IpcChannels.RegistryProvidersChanged, listener);
+  }
 });

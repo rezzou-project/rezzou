@@ -1,14 +1,14 @@
 // Import Third-party Dependencies
 import { useState, useEffect } from "react";
 import type { FormEvent } from "react";
-import type { Provider } from "@rezzou/core";
 
 // Import Internal Dependencies
 import { useAppStore } from "../stores/app.js";
+import type { ProviderInfo } from "../../../shared/ipc-channels.js";
 
 // CONSTANTS
-const kProviders: Provider[] = ["github", "gitlab"];
-const kProviderConfig = {
+const kBuiltinProviders = new Set(["github", "gitlab"]);
+const kBuiltinConfig: Record<string, { label: string; tokenPlaceholder: string; }> = {
   gitlab: {
     label: "Connect to GitLab",
     tokenPlaceholder: "glpat-xxxxxxxxxxxxxxxxxxxx"
@@ -17,7 +17,7 @@ const kProviderConfig = {
     label: "Connect to GitHub",
     tokenPlaceholder: "ghp_xxxxxxxxxxxxxxxxxxxx"
   }
-} as const;
+};
 
 type OAuthState =
   | { status: "idle"; }
@@ -26,29 +26,39 @@ type OAuthState =
   | { status: "error"; message: string; };
 
 export function SetupForm() {
-  const [provider, setProvider] = useState<Provider>("github");
+  const [providers, setProviders] = useState<ProviderInfo[]>([]);
+  const [provider, setProvider] = useState<string>("github");
   const [token, setToken] = useState("");
   const [oauthState, setOAuthState] = useState<OAuthState>({ status: "idle" });
   const { authenticate, receiveOAuthResult, isLoading, error } = useAppStore();
 
-  const providerConfig = kProviderConfig[provider];
-  const isOAuthPending = oauthState.status === "github-device" || oauthState.status === "gitlab-pending";
-
   useEffect(() => {
+    window.api.listProviders().then(setProviders).catch(() => {
+      setProviders([{ provider: "github", name: "GitHub" }, { provider: "gitlab", name: "GitLab" }]);
+    });
+
+    const unsubProviders = window.api.onProvidersChanged(setProviders);
     const unsubAuth = window.api.onOAuthAuthenticated((namespaces, oauthProvider) => {
       setOAuthState({ status: "idle" });
       receiveOAuthResult(namespaces, oauthProvider);
     });
-
     const unsubError = window.api.onOAuthError((message) => {
       setOAuthState({ status: "error", message });
     });
 
     return () => {
+      unsubProviders();
       unsubAuth();
       unsubError();
     };
   }, [receiveOAuthResult]);
+
+  const builtinConfig = kBuiltinConfig[provider] ?? null;
+  const isBuiltin = kBuiltinProviders.has(provider);
+  const isOAuthPending = oauthState.status === "github-device" || oauthState.status === "gitlab-pending";
+
+  const displayLabel = builtinConfig?.label ?? `Connect to ${providers.find((p) => p.provider === provider)?.name ?? provider}`;
+  const tokenPlaceholder = builtinConfig?.tokenPlaceholder ?? "your-access-token";
 
   async function handleAuthenticate(event: FormEvent) {
     event.preventDefault();
@@ -84,7 +94,7 @@ export function SetupForm() {
     setOAuthState({ status: "idle" });
   }
 
-  function handleProviderChange(next: Provider) {
+  function handleProviderChange(next: string) {
     if (isOAuthPending) {
       void window.api.cancelOAuth();
     }
@@ -99,26 +109,30 @@ export function SetupForm() {
   return (
     <div className="flex flex-col items-center justify-center pt-20">
       <div className="w-full max-w-md">
-        <h2 className="mb-6 text-2xl font-semibold">{providerConfig.label}</h2>
+        <h2 className="mb-6 text-2xl font-semibold">{displayLabel}</h2>
 
-        <div className="mb-6 flex gap-1 rounded-lg border border-gray-700 p-1">
-          {kProviders.map((providerOption) => (
-            <button
-              key={providerOption}
-              type="button"
-              onClick={() => handleProviderChange(providerOption)}
-              className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                providerOption === provider
-                  ? providerOption === "github"
-                    ? "bg-gray-700 text-gray-100"
-                    : "bg-orange-700 text-white"
-                  : "text-gray-400 hover:text-gray-200"
-              }`}
-            >
-              {providerOption === "github" ? "GitHub" : "GitLab"}
-            </button>
-          ))}
-        </div>
+        {providers.length > 0 && (
+          <div className="mb-6 flex gap-1 rounded-lg border border-gray-700 p-1">
+            {providers.map((p) => (
+              <button
+                key={p.provider}
+                type="button"
+                onClick={() => handleProviderChange(p.provider)}
+                className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                  p.provider === provider
+                    ? p.provider === "github"
+                      ? "bg-gray-700 text-gray-100"
+                      : p.provider === "gitlab"
+                        ? "bg-orange-700 text-white"
+                        : "bg-blue-700 text-white"
+                    : "text-gray-400 hover:text-gray-200"
+                }`}
+              >
+                {p.name}
+              </button>
+            ))}
+          </div>
+        )}
 
         {oauthState.status === "github-device" && (
           <div className="mb-6 flex flex-col gap-3 rounded-lg border border-gray-700 bg-gray-900 p-4">
@@ -170,7 +184,7 @@ export function SetupForm() {
           </div>
         )}
 
-        {oauthState.status === "idle" && (
+        {oauthState.status === "idle" && isBuiltin && (
           <div className="mb-4 flex flex-col gap-2">
             {provider === "github" && (
               <button
@@ -195,14 +209,16 @@ export function SetupForm() {
           </div>
         )}
 
-        <div className="relative mb-4">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-gray-800" />
+        {isBuiltin && (
+          <div className="relative mb-4">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-800" />
+            </div>
+            <div className="relative flex justify-center">
+              <span className="bg-gray-950 px-2 text-xs text-gray-600">or use a Personal Access Token</span>
+            </div>
           </div>
-          <div className="relative flex justify-center">
-            <span className="bg-gray-950 px-2 text-xs text-gray-600">or use a Personal Access Token</span>
-          </div>
-        </div>
+        )}
 
         <form onSubmit={handleAuthenticate} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1">
@@ -214,7 +230,7 @@ export function SetupForm() {
               type="password"
               value={token}
               onChange={(event) => setToken(event.target.value)}
-              placeholder={providerConfig.tokenPlaceholder}
+              placeholder={tokenPlaceholder}
               required
               className="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm placeholder-gray-600 focus:border-blue-500 focus:outline-none"
             />
