@@ -30,6 +30,7 @@ const mockGetBranch = mock.fn(async() => {
 });
 
 const mockCreateRef = mock.fn(async() => void 0);
+const mockDeleteRef = mock.fn(async() => void 0);
 const mockGetTree = mock.fn(async() => {
   return { data: { tree: [] as unknown[] } };
 });
@@ -66,6 +67,7 @@ mock.module("@octokit/rest", {
         },
         git: {
           createRef: mockCreateRef,
+          deleteRef: mockDeleteRef,
           getTree: mockGetTree
         },
         request: mockRequest,
@@ -121,6 +123,7 @@ describe("GitHubAdapter", () => {
     mockGetContent.mock.resetCalls();
     mockGetBranch.mock.resetCalls();
     mockCreateRef.mock.resetCalls();
+    mockDeleteRef.mock.resetCalls();
     mockGetTree.mock.resetCalls();
     mockRequest.mock.resetCalls();
     mockPullsCreate.mock.resetCalls();
@@ -512,6 +515,39 @@ describe("GitHubAdapter", () => {
       await adapter.submitChanges({ ...kParams, reviewers: [] });
 
       assert.equal(mockRequestReviewers.mock.callCount(), 0);
+    });
+
+    it("should delete the head branch when the GraphQL commit fails", async() => {
+      mockRequest.mock.mockImplementationOnce(async() => {
+        throw new Error("GraphQL error");
+      });
+
+      const adapter = new GitHubAdapter(kToken);
+      const error = await adapter.submitChanges(kParams).catch((err) => err);
+
+      assert.ok(error instanceof Error);
+      assert.equal(error.message, `Failed to commit changes to ${kParams.repoPath}`);
+      assert.ok(error.cause instanceof Error);
+      assert.equal((error.cause as Error).message, "GraphQL error");
+      assert.equal(mockDeleteRef.mock.callCount(), 1);
+      assert.deepEqual(mockDeleteRef.mock.calls[0].arguments, [
+        { owner: "owner", repo: "repo", ref: `heads/${kParams.headBranch}` }
+      ]);
+    });
+
+    it("should not delete the head branch when PR creation fails", async() => {
+      mockPullsCreate.mock.mockImplementationOnce(async() => {
+        throw new Error("PR creation error");
+      });
+
+      const adapter = new GitHubAdapter(kToken);
+      const error = await adapter.submitChanges(kParams).catch((err) => err);
+
+      assert.ok(error instanceof Error);
+      assert.equal(error.message, `Failed to create pull request for ${kParams.repoPath}`);
+      assert.ok(error.cause instanceof Error);
+      assert.equal((error.cause as Error).message, "PR creation error");
+      assert.equal(mockDeleteRef.mock.callCount(), 0);
     });
   });
 

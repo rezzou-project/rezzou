@@ -130,21 +130,27 @@ export class GitLabAdapter extends BaseProvider {
       ? await this.#resolveUserIds(params.reviewers)
       : void 0;
 
-    const mr = await this.#client.MergeRequests.create(
-      params.repoPath,
-      params.headBranch,
-      params.baseBranch,
-      params.prTitle,
-      {
-        description: params.prDescription,
-        ...(reviewerIds !== void 0 && { reviewerIds })
-      }
-    );
+    try {
+      const mr = await this.#client.MergeRequests.create(
+        params.repoPath,
+        params.headBranch,
+        params.baseBranch,
+        params.prTitle,
+        {
+          description: params.prDescription,
+          ...(reviewerIds !== void 0 && { reviewerIds })
+        }
+      );
 
-    return {
-      prUrl: String(mr.web_url),
-      prTitle: String(mr.title)
-    };
+      return {
+        prUrl: String(mr.web_url),
+        prTitle: String(mr.title)
+      };
+    }
+    catch (error) {
+      await this.#client.Branches.remove(params.repoPath, params.headBranch).catch(() => void 0);
+      throw new Error(`Failed to create merge request for ${params.repoPath}`, { cause: error });
+    }
   }
 
   async listTree(repoPath: string, branch: string): Promise<string[]> {
