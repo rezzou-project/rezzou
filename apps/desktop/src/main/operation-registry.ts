@@ -11,7 +11,7 @@ import {
   renameFilePlugin,
   replacePatternPlugin
 } from "@rezzou/plugins";
-import type { Operation } from "@rezzou/core";
+import type { Operation, InputField } from "@rezzou/core";
 
 const kBuiltinOperations = [
   licenseYearPlugin,
@@ -27,6 +27,7 @@ export interface OperationInfo {
   id: string;
   name: string;
   description: string;
+  inputs?: readonly InputField[];
 }
 
 class OperationRegistry extends events.EventEmitter {
@@ -49,7 +50,8 @@ class OperationRegistry extends events.EventEmitter {
       return {
         id: op.id,
         name: op.name,
-        description: op.description
+        description: op.description,
+        inputs: op.inputs
       };
     });
   }

@@ -1,13 +1,17 @@
 // Import Third-party Dependencies
 import { useState, useEffect } from "react";
+import type { InputField } from "@rezzou/core";
 
 // Import Internal Dependencies
 import { useAppStore } from "../stores/app.js";
+import { InputsForm } from "./InputsForm.js";
+import { getDefaultValues } from "../utils/inputsForm.js";
 
 interface OperationInfo {
   id: string;
   name: string;
   description: string;
+  inputs?: readonly InputField[];
 }
 
 export function OperationPicker() {
@@ -15,7 +19,14 @@ export function OperationPicker() {
   const [pluginLoading, setPluginLoading] = useState(false);
   const [pluginError, setPluginError] = useState<string | null>(null);
   const [missingPlugins, setMissingPlugins] = useState<string[]>([]);
-  const { selectedOperationId, setSelectedOperation, scanRepos, isLoading } = useAppStore();
+  const {
+    selectedOperationId,
+    setSelectedOperation,
+    scanRepos,
+    isLoading,
+    operationInputs,
+    setOperationInputs
+  } = useAppStore();
 
   useEffect(() => {
     void window.api.listOperations().then(setOperations);
@@ -27,6 +38,20 @@ export function OperationPicker() {
 
     return window.api.onOperationsChanged(setOperations);
   }, []);
+
+  const selectedOp = operations.find((op) => op.id === selectedOperationId);
+
+  function handleSelectOperation(id: string) {
+    setSelectedOperation(id);
+    const op = operations.find((o) => o.id === id);
+    if (op?.inputs && op.inputs.length > 0) {
+      setOperationInputs(getDefaultValues(op.inputs));
+    }
+  }
+
+  function handleFieldChange(key: string, value: unknown) {
+    setOperationInputs({ ...operationInputs, [key]: value });
+  }
 
   async function handleLoadPlugin() {
     setPluginLoading(true);
@@ -64,7 +89,7 @@ export function OperationPicker() {
               name="operation"
               value={op.id}
               checked={selectedOperationId === op.id}
-              onChange={() => setSelectedOperation(op.id)}
+              onChange={() => handleSelectOperation(op.id)}
               className="mt-0.5 accent-blue-600"
             />
             <div>
@@ -74,6 +99,17 @@ export function OperationPicker() {
           </label>
         ))}
       </div>
+
+      {selectedOp?.inputs && selectedOp.inputs.length > 0 && (
+        <div className="mb-6 rounded-lg border border-gray-800 bg-gray-900 px-4 py-4">
+          <p className="mb-4 text-sm font-medium text-gray-300">Operation parameters</p>
+          <InputsForm
+            fields={selectedOp.inputs}
+            values={operationInputs}
+            onChange={handleFieldChange}
+          />
+        </div>
+      )}
 
       {missingPlugins.length > 0 && (
         <div className="mb-4 rounded-lg border border-yellow-700 bg-yellow-950 px-4 py-3">
