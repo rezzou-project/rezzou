@@ -10,8 +10,7 @@ import {
   type RepoDiff,
   type ProviderAdapter,
   type Provider,
-  type Namespace,
-  type OperationOverrides
+  type Namespace
 } from "@rezzou/core";
 
 // Import Internal Dependencies
@@ -30,86 +29,29 @@ import {
   handleGitLabOAuthCallback,
   type GetOperationDefaultsOptions
 } from "./handlers.ts";
-import { listOperations, registry, type OperationInfo } from "./operation-registry.ts";
+import { listOperations, registry } from "./operation-registry.ts";
 import { filterRegistry } from "./filter-registry.ts";
 import { loadPlugin, unregisterPluginByPath } from "./plugin-loader.ts";
 import { readPluginPaths, addPluginPath, removePluginPath, scanPluginsDir } from "./plugins-store.ts";
-import { readHistory, recordRun, type RecordRunPayload } from "./history-store.ts";
+import { readHistory, recordRun } from "./history-store.ts";
 import { saveCredentials, loadSavedCredentials } from "./credentials-store.ts";
-
-interface AuthenticateOptions {
-  token: string;
-  provider: Provider;
-}
-
-interface LoadReposPayload {
-  namespace: string;
-  provider: Provider;
-}
-
-interface ScanReposPayload {
-  repos: Repo[];
-  operationId: string;
-  inputs: Record<string, unknown>;
-  provider: Provider;
-}
-
-interface ApplyDiffPayload {
-  diff: RepoDiff;
-  inputs: Record<string, unknown>;
-  operationId: string;
-  overrides?: OperationOverrides;
-  force?: boolean;
-  provider: Provider;
-}
-
-interface FetchMembersPayload {
-  namespace: string;
-  provider: Provider;
-}
-
-interface GetRepoStatsPayload {
-  repoPath: string;
-  provider: Provider;
-}
-
-interface LoadPluginPayload {
-  filePath: string;
-}
-
-interface PluginInfo {
-  id: string;
-  name: string;
-  version: string;
-}
-
-interface LoadedPluginInfo {
-  id: string;
-  name: string;
-  version: string;
-  filePath: string;
-  source: "persisted" | "auto-scanned";
-}
-
-interface UnloadPluginPayload {
-  filePath: string;
-}
-
-interface ReloadPluginPayload {
-  filePath: string;
-}
-
-interface FilterReposPayload {
-  repos: Repo[];
-  filterIds: string[];
-  provider: Provider;
-}
-
-interface CheckBranchConflictsPayload {
-  repoPaths: string[];
-  branchName: string;
-  provider: Provider;
-}
+import {
+  IpcChannels,
+  type AuthenticateOptions,
+  type LoadReposPayload,
+  type ScanReposPayload,
+  type ApplyDiffPayload,
+  type FetchMembersPayload,
+  type GetRepoStatsPayload,
+  type LoadPluginPayload,
+  type PluginInfo,
+  type LoadedPluginInfo,
+  type UnloadPluginPayload,
+  type ReloadPluginPayload,
+  type FilterReposPayload,
+  type CheckBranchConflictsPayload,
+  type RecordRunPayload
+} from "../shared/ipc-channels.ts";
 
 // CONSTANTS
 const kGitHubClientId = import.meta.env.MAIN_VITE_GITHUB_CLIENT_ID as string;
@@ -189,10 +131,10 @@ app.on("open-url", async(event, url) => {
     const { adapter, namespaces } = await handleAuthenticate(token, "gitlab");
     adapters.set("gitlab", adapter);
     saveCredentials(app.getPath("userData"), token, "gitlab");
-    mainWindow?.webContents.send("oauth:authenticated", namespaces, "gitlab");
+    mainWindow?.webContents.send(IpcChannels.OAuthAuthenticated, namespaces, "gitlab");
   }
   catch {
-    mainWindow?.webContents.send("oauth:error", "GitLab authentication failed");
+    mainWindow?.webContents.send(IpcChannels.OAuthError, "GitLab authentication failed");
   }
 });
 
@@ -203,7 +145,7 @@ app.whenReady().then(async() => {
 
   const missingPluginPaths: string[] = [];
 
-  ipcMain.handle("oauth:github-device-start", async(event): Promise<{ user_code: string; verification_uri: string; }> => {
+  ipcMain.handle(IpcChannels.OAuthGitHubDeviceStart, async(event): Promise<{ user_code: string; verification_uri: string; }> => {
     if (!kGitHubClientId) {
       throw new Error("MAIN_VITE_GITHUB_CLIENT_ID is not set");
     }
@@ -221,7 +163,7 @@ app.whenReady().then(async() => {
         adapters.set("github", adapter);
         saveCredentials(app.getPath("userData"), token, "github");
         githubDeviceAbortController = null;
-        event.sender.send("oauth:authenticated", namespaces, "github");
+        event.sender.send(IpcChannels.OAuthAuthenticated, namespaces, "github");
       })
       .catch((pollError: unknown) => {
         githubDeviceAbortController = null;
@@ -229,14 +171,14 @@ app.whenReady().then(async() => {
           (pollError.message === "OAuth cancelled" || pollError.name === "AbortError");
         if (!isCancelled) {
           const message = pollError instanceof Error ? pollError.message : "Unknown error";
-          event.sender.send("oauth:error", message);
+          event.sender.send(IpcChannels.OAuthError, message);
         }
       });
 
     return { user_code, verification_uri };
   });
 
-  ipcMain.handle("oauth:gitlab-start", async() => {
+  ipcMain.handle(IpcChannels.OAuthGitLabStart, async() => {
     if (!kGitLabClientId) {
       throw new Error("MAIN_VITE_GITLAB_CLIENT_ID is not set");
     }
@@ -246,13 +188,13 @@ app.whenReady().then(async() => {
     shell.openExternal(url);
   });
 
-  ipcMain.handle("oauth:cancel", () => {
+  ipcMain.handle(IpcChannels.OAuthCancel, () => {
     githubDeviceAbortController?.abort();
     githubDeviceAbortController = null;
     pendingGitLabVerifier = null;
   });
 
-  ipcMain.handle("auth:auto-login", async(): Promise<{ namespaces: Namespace[]; provider: Provider; }[] | null> => {
+  ipcMain.handle(IpcChannels.AuthAutoLogin, async(): Promise<{ namespaces: Namespace[]; provider: Provider; }[] | null> => {
     const saved = loadSavedCredentials(app.getPath("userData"));
     if (saved.length === 0) {
       return null;
@@ -273,8 +215,8 @@ app.whenReady().then(async() => {
     return sessions.length > 0 ? sessions : null;
   });
 
-  ipcMain.handle("auth:authenticate", async(_event, options: AuthenticateOptions): Promise<Namespace[]> => {
-    const { token, provider } = options;
+  ipcMain.handle(IpcChannels.AuthAuthenticate, async(_event, payload: AuthenticateOptions): Promise<Namespace[]> => {
+    const { token, provider } = payload;
 
     const { adapter, namespaces } = await handleAuthenticate(token, provider).catch(toError);
 
@@ -284,13 +226,13 @@ app.whenReady().then(async() => {
     return namespaces;
   });
 
-  ipcMain.handle("auth:loadRepos", async(_event, payload: LoadReposPayload): Promise<Repo[]> => {
+  ipcMain.handle(IpcChannels.AuthLoadRepos, async(_event, payload: LoadReposPayload): Promise<Repo[]> => {
     const { namespace, provider } = payload;
 
     return handleLoadRepos(getAdapter(provider), namespace).catch(toError);
   });
 
-  ipcMain.handle("engine:scanRepos", async(_event, payload: ScanReposPayload): Promise<RepoDiff[]> => {
+  ipcMain.handle(IpcChannels.EngineScanRepos, async(_event, payload: ScanReposPayload): Promise<RepoDiff[]> => {
     const { repos, operationId, inputs, provider } = payload;
 
     return handleScanRepos(
@@ -300,23 +242,24 @@ app.whenReady().then(async() => {
     ).catch(toError);
   });
 
-  ipcMain.handle("engine:applyDiff", async(_event, payload: ApplyDiffPayload) => {
+  ipcMain.handle(IpcChannels.EngineApplyDiff, async(_event, payload: ApplyDiffPayload) => {
     const { provider, ...options } = payload;
 
     return handleApplyDiff(getAdapter(provider), options).catch(toError);
   });
 
-  ipcMain.handle("engine:checkBranchConflicts", async(_event, payload: CheckBranchConflictsPayload): Promise<string[]> => {
-    const { repoPaths, branchName, provider } = payload;
+  ipcMain.handle(IpcChannels.EngineCheckBranchConflicts,
+    async(_event, payload: CheckBranchConflictsPayload): Promise<string[]> => {
+      const { repoPaths, branchName, provider } = payload;
 
-    return handleCheckBranchConflicts(getAdapter(provider), { repoPaths, branchName }).catch(toError);
-  });
+      return handleCheckBranchConflicts(getAdapter(provider), { repoPaths, branchName }).catch(toError);
+    });
 
-  ipcMain.handle("engine:listOperations", (): OperationInfo[] => listOperations());
+  ipcMain.handle(IpcChannels.EngineListOperations, () => listOperations());
 
-  ipcMain.handle("engine:listFilters", () => filterRegistry.list());
+  ipcMain.handle(IpcChannels.EngineListFilters, () => filterRegistry.list());
 
-  ipcMain.handle("engine:filterRepos", async(_event, payload: FilterReposPayload): Promise<string[]> => {
+  ipcMain.handle(IpcChannels.EngineFilterRepos, async(_event, payload: FilterReposPayload): Promise<string[]> => {
     const { repos, filterIds, provider } = payload;
     const adapter = getAdapter(provider);
     const filters = filterIds.map((id) => filterRegistry.get(id));
@@ -333,7 +276,7 @@ app.whenReady().then(async() => {
     return passingIds;
   });
 
-  ipcMain.handle("plugin:load", async(_event, payload: LoadPluginPayload): Promise<PluginInfo> => {
+  ipcMain.handle(IpcChannels.PluginLoad, async(_event, payload: LoadPluginPayload): Promise<PluginInfo> => {
     const { filePath } = payload;
     const plugin = await loadPlugin(filePath).catch(toError);
     loadedPlugins.set(filePath, {
@@ -343,12 +286,12 @@ app.whenReady().then(async() => {
       filePath,
       source: "persisted"
     });
-    mainWindow?.webContents.send("registry:pluginsChanged", [...loadedPlugins.values()]);
+    mainWindow?.webContents.send(IpcChannels.RegistryPluginsChanged, [...loadedPlugins.values()]);
 
     return { id: plugin.id, name: plugin.name, version: plugin.version };
   });
 
-  ipcMain.handle("plugin:pick-and-load", async(): Promise<PluginInfo | null> => {
+  ipcMain.handle(IpcChannels.PluginPickAndLoad, async(): Promise<PluginInfo | null> => {
     const { canceled, filePaths } = await dialog.showOpenDialog({
       properties: ["openFile"],
       filters: [{ name: "Plugin", extensions: ["js", "mjs", "ts"] }]
@@ -366,24 +309,24 @@ app.whenReady().then(async() => {
       filePath,
       source: "persisted"
     });
-    mainWindow?.webContents.send("registry:pluginsChanged", [...loadedPlugins.values()]);
+    mainWindow?.webContents.send(IpcChannels.RegistryPluginsChanged, [...loadedPlugins.values()]);
 
     return { id: plugin.id, name: plugin.name, version: plugin.version };
   });
 
-  ipcMain.handle("plugin:getMissing", (): string[] => missingPluginPaths);
+  ipcMain.handle(IpcChannels.PluginGetMissing, (): string[] => missingPluginPaths);
 
-  ipcMain.handle("plugin:list", (): LoadedPluginInfo[] => [...loadedPlugins.values()]);
+  ipcMain.handle(IpcChannels.PluginList, (): LoadedPluginInfo[] => [...loadedPlugins.values()]);
 
-  ipcMain.handle("plugin:unload", async(_event, payload: UnloadPluginPayload): Promise<void> => {
+  ipcMain.handle(IpcChannels.PluginUnload, async(_event, payload: UnloadPluginPayload): Promise<void> => {
     const { filePath } = payload;
     unregisterPluginByPath(filePath);
     removePluginPath(filePath);
     loadedPlugins.delete(filePath);
-    mainWindow?.webContents.send("registry:pluginsChanged", [...loadedPlugins.values()]);
+    mainWindow?.webContents.send(IpcChannels.RegistryPluginsChanged, [...loadedPlugins.values()]);
   });
 
-  ipcMain.handle("plugin:reload", async(_event, payload: ReloadPluginPayload): Promise<PluginInfo> => {
+  ipcMain.handle(IpcChannels.PluginReload, async(_event, payload: ReloadPluginPayload): Promise<PluginInfo> => {
     const { filePath } = payload;
     unregisterPluginByPath(filePath);
     const plugin = await loadPlugin(filePath).catch(toError);
@@ -396,30 +339,30 @@ app.whenReady().then(async() => {
       source: existing?.source ?? "persisted"
     };
     loadedPlugins.set(filePath, info);
-    mainWindow?.webContents.send("registry:pluginsChanged", [...loadedPlugins.values()]);
+    mainWindow?.webContents.send(IpcChannels.RegistryPluginsChanged, [...loadedPlugins.values()]);
 
     return { id: plugin.id, name: plugin.name, version: plugin.version };
   });
 
-  ipcMain.handle("engine:getOperationDefaults", (_event, payload: GetOperationDefaultsOptions) => {
+  ipcMain.handle(IpcChannels.EngineGetOperationDefaults, (_event, payload: GetOperationDefaultsOptions) => {
     const { operationId, inputs } = payload;
 
     return handleGetOperationDefaults({ operationId, inputs });
   });
 
-  ipcMain.handle("engine:fetchMembers", async(_event, payload: FetchMembersPayload) => {
+  ipcMain.handle(IpcChannels.EngineFetchMembers, async(_event, payload: FetchMembersPayload) => {
     const { namespace, provider } = payload;
 
     return handleFetchMembers(getAdapter(provider), namespace).catch(toError);
   });
 
-  ipcMain.handle("history:list", () => readHistory());
+  ipcMain.handle(IpcChannels.HistoryList, () => readHistory());
 
-  ipcMain.handle("history:record", (_event, payload: RecordRunPayload): void => {
+  ipcMain.handle(IpcChannels.HistoryRecord, (_event, payload: RecordRunPayload): void => {
     recordRun(payload);
   });
 
-  ipcMain.handle("engine:getRepoStats", async(_event, payload: GetRepoStatsPayload) => {
+  ipcMain.handle(IpcChannels.EngineGetRepoStats, async(_event, payload: GetRepoStatsPayload) => {
     const { repoPath, provider } = payload;
 
     return handleGetRepoStats(getAdapter(provider), repoPath).catch(toError);
@@ -469,11 +412,11 @@ app.whenReady().then(async() => {
   createWindow();
 
   registry.on("change", function onRegistryChange() {
-    mainWindow?.webContents.send("registry:operationsChanged", registry.list());
+    mainWindow?.webContents.send(IpcChannels.RegistryOperationsChanged, registry.list());
   });
 
   filterRegistry.on("change", function onFilterRegistryChange() {
-    mainWindow?.webContents.send("registry:filtersChanged", filterRegistry.list());
+    mainWindow?.webContents.send(IpcChannels.RegistryFiltersChanged, filterRegistry.list());
   });
 
   app.on("activate", () => {

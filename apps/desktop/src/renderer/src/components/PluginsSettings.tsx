@@ -3,14 +3,7 @@ import { useState, useEffect } from "react";
 
 // Import Internal Dependencies
 import { useAppStore } from "../stores/app.js";
-
-interface LoadedPluginInfo {
-  id: string;
-  name: string;
-  version: string;
-  filePath: string;
-  source: "persisted" | "auto-scanned";
-}
+import type { LoadedPluginInfo } from "../../../shared/ipc-channels.ts";
 
 export function PluginsSettings() {
   const goHome = useAppStore((state) => state.goHome);

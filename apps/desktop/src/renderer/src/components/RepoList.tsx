@@ -4,12 +4,7 @@ import { useState, useEffect } from "react";
 // Import Internal Dependencies
 import { useAppStore } from "../stores/app.js";
 import type { Repo } from "@rezzou/core";
-
-interface FilterInfo {
-  id: string;
-  name: string;
-  description?: string;
-}
+import type { FilterInfo } from "../../../shared/ipc-channels.ts";
 
 function RepoItem({ repo }: { repo: Repo; }) {
   const isSelected = useAppStore((state) => state.selectedRepoIds.includes(repo.id));
