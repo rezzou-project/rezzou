@@ -422,20 +422,25 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
 
       set({ isLoading: true, error: null });
 
-      const selectedRepos = repos.filter((repo) => selectedRepoIds.includes(repo.id));
-      const baseDiffs = await window.api.scanRepos(
-        selectedRepos,
-        selectedOperationId,
-        { inputs: operationInputs, provider: selectedNamespace!.provider }
-      );
-      const diffs: RepoDiff[] = baseDiffs.map((diff) => {
-        return {
-          ...diff,
-          applyStatus: applyStatus.Pending
-        };
-      });
+      try {
+        const selectedRepos = repos.filter((repo) => selectedRepoIds.includes(repo.id));
+        const baseDiffs = await window.api.scanRepos(
+          selectedRepos,
+          selectedOperationId,
+          { inputs: operationInputs, provider: selectedNamespace!.provider }
+        );
+        const diffs: RepoDiff[] = baseDiffs.map((diff) => {
+          return {
+            ...diff,
+            applyStatus: applyStatus.Pending
+          };
+        });
 
-      set({ step: "diffs", diffs, isLoading: false });
+        set({ step: "diffs", diffs, isLoading: false });
+      }
+      catch (scanError) {
+        set({ isLoading: false, error: ipcErrorMessage(scanError, "Failed to scan repositories") });
+      }
     },
 
     applyDiff: async(repoPath: string) => {
@@ -537,14 +542,11 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
         });
 
         if (results.length > 0) {
-          const entry: HistoryEntry = {
-            id: crypto.randomUUID(),
-            timestamp: Date.now(),
+          await window.api.recordRun({
             operationId: selectedOperationId,
             namespace: selectedNamespace?.displayName ?? "",
             results
-          };
-          await window.api.addHistoryEntry(entry);
+          });
         }
 
         set({ isApplyingAll: false, step: "results" });

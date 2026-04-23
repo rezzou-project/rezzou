@@ -66,7 +66,7 @@ declare global {
       filterRepos(repos: Repo[], filterIds: string[], provider: Provider): Promise<string[]>;
       onFiltersChanged(callback: (filters: FilterInfo[]) => void): () => void;
       listHistory(): Promise<HistoryEntry[]>;
-      addHistoryEntry(entry: HistoryEntry): Promise<void>;
+      recordRun(payload: { operationId: string; namespace: string; results: HistoryEntryResult[] }): Promise<void>;
     };
   }
 }

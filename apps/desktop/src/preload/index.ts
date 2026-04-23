@@ -48,6 +48,12 @@ interface HistoryEntry {
   results: HistoryEntryResult[];
 }
 
+interface RecordRunPayload {
+  operationId: string;
+  namespace: string;
+  results: HistoryEntryResult[];
+}
+
 interface LoadedPluginInfo {
   id: string;
   name: string;
@@ -198,5 +204,5 @@ contextBridge.exposeInMainWorld("api", {
 
   listHistory: (): Promise<HistoryEntry[]> => ipcRenderer.invoke("history:list"),
 
-  addHistoryEntry: (entry: HistoryEntry): Promise<void> => ipcRenderer.invoke("history:add", { entry })
+  recordRun: (payload: RecordRunPayload): Promise<void> => ipcRenderer.invoke("history:record", payload)
 });
