@@ -6,7 +6,9 @@ import * as path from "node:path";
 import * as fs from "node:fs";
 
 // CONSTANTS
-const kTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "rezzou-creds-test-"));
+const kTmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "rezzou-creds-test-"));
+const kRezzouDir = path.join(kTmpHome, ".rezzou");
+const kCredentialsFile = path.join(kRezzouDir, "credentials.json");
 const kEncryptedBuffer = Buffer.from("encrypted-token");
 const kDecryptedToken = "my-secret-token";
 
@@ -35,10 +37,16 @@ mock.module("electron", {
   }
 });
 
+mock.module("node:os", {
+  namedExports: {
+    homedir: () => kTmpHome
+  }
+});
+
 const { saveCredentials, loadSavedCredentials } = await import("../credentials-store.ts");
 
 after(() => {
-  fs.rmSync(kTmpDir, { recursive: true, force: true });
+  fs.rmSync(kTmpHome, { recursive: true, force: true });
 });
 
 describe("credentials-store", () => {
@@ -47,35 +55,32 @@ describe("credentials-store", () => {
       mockState.encryptionAvailable = true;
       mockIsEncryptionAvailable.mock.resetCalls();
       mockEncryptString.mock.resetCalls();
-      fs.rmSync(kTmpDir, { recursive: true, force: true });
-      fs.mkdirSync(kTmpDir, { recursive: true });
+      fs.rmSync(kRezzouDir, { recursive: true, force: true });
     });
 
     it("should throw when encryption is not available", () => {
       mockState.encryptionAvailable = false;
 
       assert.throws(
-        () => saveCredentials(kTmpDir, kDecryptedToken, "github"),
+        () => saveCredentials(kDecryptedToken, "github"),
         { message: /encryption is not available/i }
       );
       assert.equal(mockEncryptString.mock.callCount(), 0);
     });
 
     it("should write encrypted credentials to disk", () => {
-      saveCredentials(kTmpDir, kDecryptedToken, "github");
+      saveCredentials(kDecryptedToken, "github");
 
-      const credPath = path.join(kTmpDir, "credentials.json");
-      assert.ok(fs.existsSync(credPath));
-      const content = JSON.parse(fs.readFileSync(credPath, "utf-8")) as Record<string, string>;
+      assert.ok(fs.existsSync(kCredentialsFile));
+      const content = JSON.parse(fs.readFileSync(kCredentialsFile, "utf-8")) as Record<string, string>;
       assert.equal(content.github, kEncryptedBuffer.toString("base64"));
     });
 
     it("should preserve existing credentials when adding a new provider", () => {
-      saveCredentials(kTmpDir, kDecryptedToken, "github");
-      saveCredentials(kTmpDir, kDecryptedToken, "gitlab");
+      saveCredentials(kDecryptedToken, "github");
+      saveCredentials(kDecryptedToken, "gitlab");
 
-      const credPath = path.join(kTmpDir, "credentials.json");
-      const content = JSON.parse(fs.readFileSync(credPath, "utf-8")) as Record<string, string>;
+      const content = JSON.parse(fs.readFileSync(kCredentialsFile, "utf-8")) as Record<string, string>;
       assert.ok(typeof content.github === "string");
       assert.ok(typeof content.gitlab === "string");
     });
@@ -86,23 +91,22 @@ describe("credentials-store", () => {
       mockState.encryptionAvailable = true;
       mockState.decryptShouldThrow = false;
       mockDecryptString.mock.resetCalls();
-      fs.rmSync(kTmpDir, { recursive: true, force: true });
-      fs.mkdirSync(kTmpDir, { recursive: true });
+      fs.rmSync(kRezzouDir, { recursive: true, force: true });
     });
 
     it("should return an empty array when no credentials file exists", () => {
-      const result = loadSavedCredentials(kTmpDir);
+      const result = loadSavedCredentials();
 
       assert.deepEqual(result, []);
     });
 
     it("should return saved credentials for known providers", () => {
-      const credPath = path.join(kTmpDir, "credentials.json");
-      fs.writeFileSync(credPath, JSON.stringify({
+      fs.mkdirSync(kRezzouDir, { recursive: true });
+      fs.writeFileSync(kCredentialsFile, JSON.stringify({
         github: kEncryptedBuffer.toString("base64")
       }));
 
-      const result = loadSavedCredentials(kTmpDir);
+      const result = loadSavedCredentials();
 
       assert.equal(result.length, 1);
       assert.equal(result[0].provider, "github");
@@ -111,21 +115,21 @@ describe("credentials-store", () => {
 
     it("should skip a provider whose decryption fails", () => {
       mockState.decryptShouldThrow = true;
-      const credPath = path.join(kTmpDir, "credentials.json");
-      fs.writeFileSync(credPath, JSON.stringify({
+      fs.mkdirSync(kRezzouDir, { recursive: true });
+      fs.writeFileSync(kCredentialsFile, JSON.stringify({
         github: kEncryptedBuffer.toString("base64")
       }));
 
-      const result = loadSavedCredentials(kTmpDir);
+      const result = loadSavedCredentials();
 
       assert.deepEqual(result, []);
     });
 
     it("should return an empty array when the credentials file contains invalid JSON", () => {
-      const credPath = path.join(kTmpDir, "credentials.json");
-      fs.writeFileSync(credPath, "not-json");
+      fs.mkdirSync(kRezzouDir, { recursive: true });
+      fs.writeFileSync(kCredentialsFile, "not-json");
 
-      const result = loadSavedCredentials(kTmpDir);
+      const result = loadSavedCredentials();
 
       assert.deepEqual(result, []);
     });
