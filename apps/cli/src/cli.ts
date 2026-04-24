@@ -2,12 +2,16 @@
 import { parseArgs } from "node:util";
 import { createRequire } from "node:module";
 
+// Import Internal Dependencies
+import { loginCommand } from "./commands/login.js";
+
 // CONSTANTS
 const kRequire = createRequire(import.meta.url);
 const kVersion = kRequire("../package.json").version;
 const kUsage = `Usage: rezzou <command> [options]
 
 Commands:
+  login <provider>   Authenticate with a provider (github | gitlab)
 
 Options:
   -h, --help     Show this help message
@@ -15,7 +19,9 @@ Options:
 
 type CommandHandler = (args: string[]) => Promise<void>;
 
-const kCommands = new Map<string, CommandHandler>();
+const kCommands = new Map<string, CommandHandler>([
+  ["login", loginCommand]
+]);
 
 export async function run(args: string[]): Promise<void> {
   const { positionals, values } = parseArgs({
