@@ -1,0 +1,33 @@
+{
+  "name": "@rezzou/cli",
+  "version": "0.1.0",
+  "description": "CLI for Rezzou. Bulk maintenance operations across repositories",
+  "author": "Pierre Demailly <pierredemailly.pro@gmail.com>",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "rezzou": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "prepublishOnly": "npm run build"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": false,
+    "registry": "https://registry.npmjs.org/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rezzou-project/rezzou.git",
+    "directory": "apps/cli"
+  },
+  "dependencies": {
+    "@rezzou/core": "*",
+    "@rezzou/providers": "*",
+    "@rezzou/sdk": "*"
+  }
+}

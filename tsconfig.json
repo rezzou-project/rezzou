@@ -5,6 +5,7 @@
     { "path": "packages/providers" },
     { "path": "packages/sdk" },
     { "path": "packages/plugins" },
-    { "path": "apps/desktop" }
+    { "path": "apps/desktop" },
+    { "path": "apps/cli" }
   ]
 }
