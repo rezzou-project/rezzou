@@ -4,7 +4,7 @@ import * as readline from "node:readline";
 import * as timers from "node:timers/promises";
 
 // Import Internal Dependencies
-import { saveToken } from "../credentials.js";
+import { saveToken } from "../credentials.ts";
 
 // CONSTANTS
 const kGitHubClientId = process.env.REZZOU_GITHUB_CLIENT_ID ?? "Ov23liiCyupi2IZwtyTC";
