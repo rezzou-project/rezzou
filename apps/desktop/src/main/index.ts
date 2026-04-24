@@ -136,7 +136,7 @@ app.on("open-url", async(event, url) => {
     const token = await handleGitLabOAuthCallback(kGitLabClientId, code, verifier);
     const { adapter, namespaces } = await handleAuthenticate(token, "gitlab");
     adapters.set("gitlab", adapter);
-    saveCredentials(app.getPath("userData"), token, "gitlab");
+    saveCredentials(token, "gitlab");
     mainWindow?.webContents.send(IpcChannels.OAuthAuthenticated, namespaces, "gitlab");
   }
   catch {
@@ -167,7 +167,7 @@ app.whenReady().then(async() => {
       .then(async(token) => {
         const { adapter, namespaces } = await handleAuthenticate(token, "github");
         adapters.set("github", adapter);
-        saveCredentials(app.getPath("userData"), token, "github");
+        saveCredentials(token, "github");
         githubDeviceAbortController = null;
         event.sender.send(IpcChannels.OAuthAuthenticated, namespaces, "github");
       })
@@ -201,7 +201,7 @@ app.whenReady().then(async() => {
   });
 
   ipcMain.handle(IpcChannels.AuthAutoLogin, async(): Promise<{ namespaces: Namespace[]; provider: Provider; }[] | null> => {
-    const saved = loadSavedCredentials(app.getPath("userData"));
+    const saved = loadSavedCredentials();
     if (saved.length === 0) {
       return null;
     }
@@ -227,7 +227,7 @@ app.whenReady().then(async() => {
     const { adapter, namespaces } = await handleAuthenticate(token, provider).catch(serializeError);
 
     adapters.set(provider, adapter);
-    saveCredentials(app.getPath("userData"), token, provider);
+    saveCredentials(token, provider);
 
     return namespaces;
   });

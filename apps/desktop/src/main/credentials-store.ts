@@ -1,24 +1,25 @@
 // Import Node.js Dependencies
 import * as path from "node:path";
 import * as fs from "node:fs";
+import * as os from "node:os";
 
 // Import Third-party Dependencies
 import { safeStorage } from "electron";
 
 // CONSTANTS
-const kCredentialsFile = "credentials.json";
+const kRezzouDir = path.join(os.homedir(), ".rezzou");
+const kCredentialsFile = path.join(kRezzouDir, "credentials.json");
 
-export function saveCredentials(dataPath: string, token: string, provider: string): void {
+export function saveCredentials(token: string, provider: string): void {
   if (!safeStorage.isEncryptionAvailable()) {
     throw new Error("Encryption is not available on this system. Token cannot be persisted securely.");
   }
 
-  const credPath = path.join(dataPath, kCredentialsFile);
   let existing: Record<string, string> = {};
 
-  if (fs.existsSync(credPath)) {
+  if (fs.existsSync(kCredentialsFile)) {
     try {
-      existing = JSON.parse(fs.readFileSync(credPath, "utf-8")) as Record<string, string>;
+      existing = JSON.parse(fs.readFileSync(kCredentialsFile, "utf-8")) as Record<string, string>;
     }
     catch {
       // ignore malformed file
@@ -26,17 +27,17 @@ export function saveCredentials(dataPath: string, token: string, provider: strin
   }
 
   const encrypted = safeStorage.encryptString(token).toString("base64");
-  fs.writeFileSync(credPath, JSON.stringify({ ...existing, [provider]: encrypted }));
+  fs.mkdirSync(kRezzouDir, { recursive: true });
+  fs.writeFileSync(kCredentialsFile, JSON.stringify({ ...existing, [provider]: encrypted }));
 }
 
-export function loadSavedCredentials(dataPath: string): { token: string; provider: string; }[] {
-  const credPath = path.join(dataPath, kCredentialsFile);
-  if (!fs.existsSync(credPath)) {
+export function loadSavedCredentials(): { token: string; provider: string; }[] {
+  if (!fs.existsSync(kCredentialsFile)) {
     return [];
   }
 
   try {
-    const raw = JSON.parse(fs.readFileSync(credPath, "utf-8")) as Record<string, string>;
+    const raw = JSON.parse(fs.readFileSync(kCredentialsFile, "utf-8")) as Record<string, string>;
     const results: { token: string; provider: string; }[] = [];
 
     for (const provider of Object.keys(raw)) {
