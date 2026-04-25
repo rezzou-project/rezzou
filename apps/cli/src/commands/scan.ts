@@ -8,12 +8,20 @@ import { scanRepos, type ProviderAdapter, type Repo, type RepoDiff, type Operati
 import { createAdapter } from "../adapter.ts";
 import { loadPluginOperations } from "../plugin-loader.ts";
 import { readPluginPaths, scanPluginsDir } from "../plugin-store.ts";
+import {
+  isTTY,
+  selectProvider,
+  selectNamespace,
+  selectOperation,
+  multiselectRepos,
+  promptOperationInputs
+} from "../interactive.ts";
 
 // CONSTANTS
-const kUsage = `Usage: rezzou scan <provider> <namespace> --operation <op-id> [options]
+const kUsage = `Usage: rezzou scan [provider] [namespace] [options]
 
 Options:
-  -o, --operation <id>       Operation ID to apply (required)
+  -o, --operation <id>       Operation ID to apply
   -i, --input key=value      Input value for the operation (repeatable)
   -r, --repos repo1,repo2    Comma-separated list of repo full paths to scan (default: all)
   -h, --help                 Show this help message`;
@@ -72,43 +80,82 @@ export async function scanCommand(args: string[], deps: ScanDeps = kDefaultDeps)
     strict: false
   });
 
-  const [provider, namespace] = positionals;
-
-  if (values.help || !provider || !namespace) {
+  if (values.help) {
     console.log(kUsage);
 
     return;
   }
 
-  if (!values.operation) {
-    console.error("Missing required option: --operation <op-id>\n");
-    console.log(kUsage);
+  let [provider, namespace] = positionals;
 
-    return;
+  if (!provider) {
+    if (!isTTY()) {
+      console.log(kUsage);
+
+      return;
+    }
+    provider = await selectProvider();
+  }
+
+  let adapterInstance: ProviderAdapter | null = null;
+  function getAdapter() {
+    adapterInstance ??= deps.createAdapter(provider);
+
+    return adapterInstance;
+  }
+
+  if (!namespace) {
+    if (!isTTY()) {
+      console.log(kUsage);
+
+      return;
+    }
+    namespace = await selectNamespace(getAdapter());
   }
 
   const pluginPaths = deps.getPluginPaths();
   const operations = await deps.loadOperations(pluginPaths);
-  const operation = operations.get(values.operation);
+
+  let operationId: string | undefined = typeof values.operation === "string" ? values.operation : undefined;
+
+  if (!operationId) {
+    if (!isTTY()) {
+      console.error("Missing required option: --operation <op-id>\n");
+      console.log(kUsage);
+
+      return;
+    }
+    operationId = await selectOperation(operations);
+  }
+
+  const operation = operations.get(operationId);
 
   if (!operation) {
     const available = [...operations.keys()].join(", ") || "(none)";
-    throw new Error(`Operation not found: "${values.operation}". Available: ${available}`);
+    throw new Error(`Operation not found: "${operationId}". Available: ${available}`);
   }
 
-  const inputs = parseInputs(values.input ?? []);
-  const adapter = deps.createAdapter(provider);
+  const rawInputs = (values.input ?? []).filter((v): v is string => typeof v === "string");
+  const inputs = await promptOperationInputs(operation, parseInputs(rawInputs));
+  let repos: Repo[];
 
-  let repos = await adapter.listRepos(namespace);
+  const rawRepos = typeof values.repos === "string" ? values.repos : undefined;
 
-  if (values.repos) {
-    const filterSet = new Set(values.repos.split(",").map((repo) => repo.trim()));
-    repos = repos.filter((repo) => filterSet.has(repo.fullPath));
+  if (rawRepos) {
+    const allRepos = await getAdapter().listRepos(namespace);
+    const filterSet = new Set(rawRepos.split(",").map((repo) => repo.trim()));
+    repos = allRepos.filter((repo) => filterSet.has(repo.fullPath));
+  }
+  else if (isTTY()) {
+    repos = await multiselectRepos(getAdapter(), namespace);
+  }
+  else {
+    repos = await getAdapter().listRepos(namespace);
   }
 
-  console.log(`\nScanning ${repos.length} repos for operation "${values.operation}"...`);
+  console.log(`\nScanning ${repos.length} repos for operation "${operationId}"...`);
 
-  const diffs = await deps.runScan(adapter, repos, { operation, inputs });
+  const diffs = await deps.runScan(getAdapter(), repos, { operation, inputs });
 
   for (const diff of diffs) {
     printRepoDiff(diff);
