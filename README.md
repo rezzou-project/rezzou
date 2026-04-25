@@ -16,6 +16,7 @@ Bulk maintenance operations across GitHub and GitLab repositories.
 | App | Description |
 |---|---|
 | [`@rezzou/desktop`](./apps/desktop) | Electron desktop application |
+| [`@rezzou/cli`](./apps/cli) | Rezzou CLI |
 
 ## Requirements
 
