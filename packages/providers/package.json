@@ -34,9 +34,8 @@
   "dependencies": {
     "@gitbeaker/rest": "^43.8.0",
     "@octokit/rest": "^22.0.1",
-    "@rezzou/core": "*"
-  },
-  "devDependencies": {
+    "@rezzou/core": "*",
     "undici": "^7.24.4"
-  }
+  },
+  "devDependencies": {}
 }
