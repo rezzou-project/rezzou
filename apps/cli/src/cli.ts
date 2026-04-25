@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 // Import Internal Dependencies
 import { loginCommand } from "./commands/login.ts";
 import { namespacesCommand } from "./commands/namespaces.ts";
+import { pluginCommand } from "./commands/plugin.ts";
 import { reposCommand } from "./commands/repos.ts";
 
 // CONSTANTS
@@ -16,6 +17,7 @@ Commands:
   login <provider>              Authenticate with a provider (github | gitlab)
   namespaces <provider>         List namespaces for a provider
   repos <provider> <namespace>  List repositories in a namespace
+  plugin <subcommand>           Manage plugins (add | list | remove)
 
 Options:
   -h, --help     Show this help message
@@ -26,6 +28,7 @@ type CommandHandler = (args: string[]) => Promise<void>;
 const kCommands = new Map<string, CommandHandler>([
   ["login", loginCommand],
   ["namespaces", namespacesCommand],
+  ["plugin", pluginCommand],
   ["repos", reposCommand]
 ]);
 

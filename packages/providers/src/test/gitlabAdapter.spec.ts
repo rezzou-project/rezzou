@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 // Import Third-party Dependencies
-import { MockAgent, type MockPool } from "@openally/httpie";
+import { MockAgent, type MockPool } from "undici";
 
 // Import Internal Dependencies
 import { GitLabAdapter } from "../gitlab.ts";
@@ -14,13 +14,14 @@ const kGitlabOrigin = "https://gitlab.com";
 const kJson = { headers: { "content-type": "application/json" } };
 
 type InterceptOptions = Parameters<MockPool["intercept"]>[0];
+type InterceptBody = Parameters<ReturnType<MockPool["intercept"]>["reply"]>[1];
 
 function createTestSetup() {
   const mockAgent = new MockAgent();
   mockAgent.disableNetConnect();
   const mockPool = mockAgent.get(kGitlabOrigin);
 
-  function intercept(options: InterceptOptions, status: number, body: unknown) {
+  function intercept(options: InterceptOptions, status: number, body: InterceptBody) {
     return mockPool.intercept(options).reply(status, body, kJson);
   }
 

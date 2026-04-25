@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 // Import Third-party Dependencies
-import { MockAgent, fetch as undiciFetch, type MockPool } from "@openally/httpie";
+import { MockAgent, fetch as undiciFetch, type MockPool } from "undici";
 import type { Repo, RepoDiff, SubmitResult, ProviderAdapter, OperationOverrides, Namespace, Operation } from "@rezzou/core";
 
 // Import Internal Dependencies
