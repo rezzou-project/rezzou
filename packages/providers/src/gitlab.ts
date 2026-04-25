@@ -19,10 +19,7 @@ export class GitLabAdapter extends BaseProvider {
 
   constructor(token: string, options: GitLabAdapterOptions = {}) {
     super();
-    this.#client = new Gitlab({
-      token,
-      ...options
-    });
+    this.#client = new Gitlab({ token, agent: options.agent });
   }
 
   async listNamespaces(): Promise<Namespace[]> {

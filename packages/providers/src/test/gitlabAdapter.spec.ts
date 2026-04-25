@@ -1,6 +1,7 @@
 // Import Node.js Dependencies
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import type { Agent } from "node:http";
 
 // Import Third-party Dependencies
 import { MockAgent, type MockPool } from "undici";
@@ -25,7 +26,7 @@ function createTestSetup() {
     return mockPool.intercept(options).reply(status, body, kJson);
   }
 
-  const adapter = new GitLabAdapter(kToken, { agent: mockAgent });
+  const adapter = new GitLabAdapter(kToken, { agent: mockAgent as unknown as Agent });
 
   return { adapter, intercept };
 }
