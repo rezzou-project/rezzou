@@ -9,6 +9,7 @@ import { pluginCommand } from "./commands/plugin.ts";
 import { reposCommand } from "./commands/repos.ts";
 import { scanCommand } from "./commands/scan.ts";
 import { applyCommand } from "./commands/apply.ts";
+import { historyCommand } from "./commands/history.ts";
 
 // CONSTANTS
 const kRequire = createRequire(import.meta.url);
@@ -22,6 +23,7 @@ Commands:
   plugin <subcommand>                     Manage plugins (add | list | remove)
   scan [provider] [namespace] [options]   Scan repos with an operation (dry-run)
   apply [provider] [namespace] [options]  Apply an operation and open PRs/MRs
+  history [options]                       List recent runs from local history
 
 Options:
   -h, --help     Show this help message
@@ -35,7 +37,8 @@ const kCommands = new Map<string, CommandHandler>([
   ["plugin", pluginCommand],
   ["repos", reposCommand],
   ["scan", scanCommand],
-  ["apply", applyCommand]
+  ["apply", applyCommand],
+  ["history", historyCommand]
 ]);
 
 export async function run(args: string[]): Promise<void> {
