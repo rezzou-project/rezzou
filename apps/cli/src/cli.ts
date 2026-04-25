@@ -3,7 +3,9 @@ import { parseArgs } from "node:util";
 import { createRequire } from "node:module";
 
 // Import Internal Dependencies
-import { loginCommand } from "./commands/login.js";
+import { loginCommand } from "./commands/login.ts";
+import { namespacesCommand } from "./commands/namespaces.ts";
+import { reposCommand } from "./commands/repos.ts";
 
 // CONSTANTS
 const kRequire = createRequire(import.meta.url);
@@ -11,7 +13,9 @@ const kVersion = kRequire("../package.json").version;
 const kUsage = `Usage: rezzou <command> [options]
 
 Commands:
-  login <provider>   Authenticate with a provider (github | gitlab)
+  login <provider>              Authenticate with a provider (github | gitlab)
+  namespaces <provider>         List namespaces for a provider
+  repos <provider> <namespace>  List repositories in a namespace
 
 Options:
   -h, --help     Show this help message
@@ -20,7 +24,9 @@ Options:
 type CommandHandler = (args: string[]) => Promise<void>;
 
 const kCommands = new Map<string, CommandHandler>([
-  ["login", loginCommand]
+  ["login", loginCommand],
+  ["namespaces", namespacesCommand],
+  ["repos", reposCommand]
 ]);
 
 export async function run(args: string[]): Promise<void> {
