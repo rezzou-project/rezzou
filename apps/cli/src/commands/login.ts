@@ -1,10 +1,10 @@
 // Import Node.js Dependencies
 import { parseArgs } from "node:util";
-import * as readline from "node:readline";
 import * as timers from "node:timers/promises";
 
 // Import Internal Dependencies
 import { saveToken } from "../credentials.ts";
+import { isTTY, selectProvider, promptGitLabToken } from "../interactive.ts";
 
 // CONSTANTS
 const kGitHubClientId = process.env.REZZOU_GITHUB_CLIENT_ID ?? "Ov23liiCyupi2IZwtyTC";
@@ -12,7 +12,7 @@ const kGitHubDeviceCodeUrl = "https://github.com/login/device/code";
 const kGitHubAccessTokenUrl = "https://github.com/login/oauth/access_token";
 const kGitHubScopes = "repo read:org";
 const kSlowDownIncrement = 5;
-const kUsage = `Usage: rezzou login <provider>
+const kUsage = `Usage: rezzou login [provider]
 
 Providers:
   github   Authenticate via GitHub device flow
@@ -91,14 +91,7 @@ async function loginGitHub(): Promise<void> {
 }
 
 async function loginGitLab(): Promise<void> {
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-
-  const token = await new Promise<string>((resolve) => {
-    rl.question("Enter your GitLab Personal Access Token (scopes: api, read_user): ", (answer) => {
-      rl.close();
-      resolve(answer.trim());
-    });
-  });
+  const token = await promptGitLabToken();
 
   if (!token) {
     throw new Error("Token cannot be empty");
@@ -118,12 +111,21 @@ export async function loginCommand(args: string[]): Promise<void> {
     strict: false
   });
 
-  const [provider] = positionals;
-
-  if (values.help || !provider) {
+  if (values.help) {
     console.log(kUsage);
 
     return;
+  }
+
+  let [provider] = positionals;
+
+  if (!provider) {
+    if (!isTTY()) {
+      console.log(kUsage);
+
+      return;
+    }
+    provider = await selectProvider();
   }
 
   if (provider === "github") {

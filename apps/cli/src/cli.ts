@@ -15,11 +15,11 @@ const kVersion = kRequire("../package.json").version;
 const kUsage = `Usage: rezzou <command> [options]
 
 Commands:
-  login <provider>                        Authenticate with a provider (github | gitlab)
-  namespaces <provider>                   List namespaces for a provider
-  repos <provider> <namespace>            List repositories in a namespace
+  login [provider]                        Authenticate with a provider (github | gitlab)
+  namespaces [provider]                   List namespaces for a provider
+  repos [provider] [namespace]            List repositories in a namespace
   plugin <subcommand>                     Manage plugins (add | list | remove)
-  scan <provider> <namespace> --operation <id>  Scan repos with an operation (dry-run)
+  scan [provider] [namespace] [options]   Scan repos with an operation (dry-run)
 
 Options:
   -h, --help     Show this help message

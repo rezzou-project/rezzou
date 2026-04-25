@@ -11,6 +11,7 @@ import {
   type RepoContext,
   type InputField
 } from "@rezzou/sdk";
+import * as builtinPlugins from "@rezzou/plugins";
 
 // CONSTANTS
 const kCurrentDir = path.dirname(url.fileURLToPath(import.meta.url));
@@ -181,8 +182,22 @@ async function loadTsPlugin(filePath: string): Promise<Operation[]> {
   } as Operation));
 }
 
-export async function loadPluginOperations(paths: string[]): Promise<Map<string, Operation>> {
+export function loadBuiltinOperations(): Map<string, Operation> {
   const operations = new Map<string, Operation>();
+
+  for (const exportedPlugin of Object.values(builtinPlugins)) {
+    if (exportedPlugin && typeof exportedPlugin === "object" && "operations" in exportedPlugin) {
+      for (const op of exportedPlugin.operations as Operation[]) {
+        operations.set(op.id, op);
+      }
+    }
+  }
+
+  return operations;
+}
+
+export async function loadPluginOperations(paths: string[]): Promise<Map<string, Operation>> {
+  const operations = loadBuiltinOperations();
 
   for (const filePath of paths) {
     try {

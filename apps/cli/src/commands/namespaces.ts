@@ -6,9 +6,10 @@ import type { ProviderAdapter } from "@rezzou/core";
 
 // Import Internal Dependencies
 import { createAdapter } from "../adapter.ts";
+import { isTTY, selectProvider } from "../interactive.ts";
 
 // CONSTANTS
-const kUsage = `Usage: rezzou namespaces <provider>
+const kUsage = `Usage: rezzou namespaces [provider]
 
 Providers:
   github   List GitHub organizations and user namespaces
@@ -30,12 +31,21 @@ export async function namespacesCommand(
     strict: false
   });
 
-  const [provider] = positionals;
-
-  if (values.help || !provider) {
+  if (values.help) {
     console.log(kUsage);
 
     return;
+  }
+
+  let [provider] = positionals;
+
+  if (!provider) {
+    if (!isTTY()) {
+      console.log(kUsage);
+
+      return;
+    }
+    provider = await selectProvider();
   }
 
   const adapter = adapterFactory(provider);

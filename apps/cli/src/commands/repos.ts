@@ -6,9 +6,10 @@ import type { ProviderAdapter } from "@rezzou/core";
 
 // Import Internal Dependencies
 import { createAdapter } from "../adapter.ts";
+import { isTTY, selectProvider, selectNamespace } from "../interactive.ts";
 
 // CONSTANTS
-const kUsage = `Usage: rezzou repos <provider> <namespace>
+const kUsage = `Usage: rezzou repos [provider] [namespace]
 
 Providers:
   github   List GitHub repositories in a namespace
@@ -30,16 +31,40 @@ export async function reposCommand(
     strict: false
   });
 
-  const [provider, namespace] = positionals;
-
-  if (values.help || !provider || !namespace) {
+  if (values.help) {
     console.log(kUsage);
 
     return;
   }
 
-  const adapter = adapterFactory(provider);
-  const repos = await adapter.listRepos(namespace);
+  let [provider, namespace] = positionals;
+
+  if (!provider) {
+    if (!isTTY()) {
+      console.log(kUsage);
+
+      return;
+    }
+    provider = await selectProvider();
+  }
+
+  let adapterInstance: ProviderAdapter | null = null;
+  function getAdapter() {
+    adapterInstance ??= adapterFactory(provider);
+
+    return adapterInstance;
+  }
+
+  if (!namespace) {
+    if (!isTTY()) {
+      console.log(kUsage);
+
+      return;
+    }
+    namespace = await selectNamespace(getAdapter());
+  }
+
+  const repos = await getAdapter().listRepos(namespace);
 
   for (const repo of repos) {
     console.log(`${repo.fullPath} [${repo.defaultBranch}] — ${repo.url}`);
