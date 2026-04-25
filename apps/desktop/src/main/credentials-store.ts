@@ -10,8 +10,14 @@ import { safeStorage } from "electron";
 const kRezzouDir = path.join(os.homedir(), ".rezzou");
 const kCredentialsFile = path.join(kRezzouDir, "credentials.json");
 
-export function saveCredentials(token: string, provider: string): void {
-  if (!safeStorage.isEncryptionAvailable()) {
+interface SafeStorageLike {
+  isEncryptionAvailable(): boolean;
+  encryptString(plainText: string): Buffer;
+  decryptString(encrypted: Buffer): string;
+}
+
+export function saveCredentials(token: string, provider: string, storage: SafeStorageLike = safeStorage): void {
+  if (!storage.isEncryptionAvailable()) {
     throw new Error("Encryption is not available on this system. Token cannot be persisted securely.");
   }
 
@@ -26,12 +32,12 @@ export function saveCredentials(token: string, provider: string): void {
     }
   }
 
-  const encrypted = safeStorage.encryptString(token).toString("base64");
+  const encrypted = storage.encryptString(token).toString("base64");
   fs.mkdirSync(kRezzouDir, { recursive: true });
   fs.writeFileSync(kCredentialsFile, JSON.stringify({ ...existing, [provider]: encrypted }));
 }
 
-export function loadSavedCredentials(): { token: string; provider: string; }[] {
+export function loadSavedCredentials(storage: SafeStorageLike = safeStorage): { token: string; provider: string; }[] {
   if (!fs.existsSync(kCredentialsFile)) {
     return [];
   }
@@ -42,7 +48,7 @@ export function loadSavedCredentials(): { token: string; provider: string; }[] {
 
     for (const provider of Object.keys(raw)) {
       try {
-        const token = safeStorage.decryptString(Buffer.from(raw[provider], "base64"));
+        const token = storage.decryptString(Buffer.from(raw[provider], "base64"));
         results.push({ token, provider });
       }
       catch {

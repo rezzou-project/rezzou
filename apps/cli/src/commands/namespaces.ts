@@ -1,6 +1,9 @@
 // Import Node.js Dependencies
 import { parseArgs } from "node:util";
 
+// Import Third-party Dependencies
+import type { ProviderAdapter } from "@rezzou/core";
+
 // Import Internal Dependencies
 import { createAdapter } from "../adapter.ts";
 
@@ -14,7 +17,10 @@ Providers:
 Options:
   -h, --help   Show this help message`;
 
-export async function namespacesCommand(args: string[]): Promise<void> {
+export async function namespacesCommand(
+  args: string[],
+  adapterFactory: (provider: string) => ProviderAdapter = createAdapter
+): Promise<void> {
   const { positionals, values } = parseArgs({
     args,
     options: {
@@ -32,7 +38,7 @@ export async function namespacesCommand(args: string[]): Promise<void> {
     return;
   }
 
-  const adapter = createAdapter(provider);
+  const adapter = adapterFactory(provider);
   const namespaces = await adapter.listNamespaces();
 
   for (const namespace of namespaces) {

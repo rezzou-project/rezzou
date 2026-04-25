@@ -133,7 +133,7 @@ app.on("open-url", async(event, url) => {
   }
 
   try {
-    const token = await handleGitLabOAuthCallback(kGitLabClientId, code, verifier);
+    const token = await handleGitLabOAuthCallback({ clientId: kGitLabClientId, code, verifier });
     const { adapter, namespaces } = await handleAuthenticate(token, "gitlab");
     adapters.set("gitlab", adapter);
     saveCredentials(token, "gitlab");

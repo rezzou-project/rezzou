@@ -1,9 +1,13 @@
+/* eslint-disable func-style */
 // Import Node.js Dependencies
-import { describe, it, mock, beforeEach } from "node:test";
+import { describe, it, before } from "node:test";
 import assert from "node:assert/strict";
 
 // Import Third-party Dependencies
 import type { Repo, RepoDiff, SubmitResult, Namespace, OperationOverrides } from "@rezzou/core";
+
+// Import Internal Dependencies
+import type { IpcApi } from "../../../shared/ipc-channels.ts";
 
 // CONSTANTS
 const kCurrentYear = String(new Date().getFullYear());
@@ -30,385 +34,472 @@ const kSubmitResult: SubmitResult = {
   prUrl: "https://gitlab.com/ns/my-repo/-/merge_requests/1",
   prTitle: "chore: update license year"
 };
-
-const mockApiAutoLogin = mock.fn(async() => null as { namespaces: Namespace[]; provider: "gitlab" | "github"; }[] | null);
-const mockApiAuthenticate = mock.fn(async() => [kNamespace] as Namespace[]);
-const mockApiLoadRepos = mock.fn(async(_namespace: string, _provider: string) => [] as Repo[]);
-const mockApiScanRepos = mock.fn(
-  async(_repos: Repo[], _operationId: string, _inputs: Record<string, unknown>): Promise<RepoDiff[]> => []
-);
-const mockApiApplyDiff = mock.fn(
-  async(_diff: RepoDiff, _options: { inputs: unknown; operationId: string; overrides?: OperationOverrides; }) => kSubmitResult
-);
-const mockApiListOperations = mock.fn(
-  async() => [{ id: "license-year", name: "License Year", description: "Update copyright year" }]
-);
 const kDefaults = {
   branchName: "rezzou/license-year-2026",
   commitMessage: "chore: update license year to 2026",
   prTitle: "chore: update license year to 2026",
   prDescription: "Automated update"
 };
-const mockApiGetOperationDefaults = mock.fn(async() => kDefaults);
-const mockApiRecordRun = mock.fn(async() => undefined);
-const mockApiCheckBranchConflicts = mock.fn(async() => [] as string[]);
 
-(globalThis as Record<string, unknown>).window = {
-  api: {
-    autoLogin: mockApiAutoLogin,
-    authenticate: mockApiAuthenticate,
-    loadRepos: mockApiLoadRepos,
-    scanRepos: mockApiScanRepos,
-    applyDiff: mockApiApplyDiff,
-    listOperations: mockApiListOperations,
-    getOperationDefaults: mockApiGetOperationDefaults,
-    recordRun: mockApiRecordRun,
-    checkBranchConflicts: mockApiCheckBranchConflicts
-  }
-};
-
-const { useAppStore, applyStatus } = await import("../stores/app.ts");
-
-function getState() {
-  return useAppStore.getState();
+function makeApi(overrides: Partial<IpcApi> = {}): IpcApi {
+  return {
+    autoLogin: async() => null,
+    authenticate: async() => [] as Namespace[],
+    loadRepos: async() => [] as Repo[],
+    scanRepos: async() => [] as RepoDiff[],
+    applyDiff: async() => kSubmitResult,
+    checkBranchConflicts: async() => [] as string[],
+    listOperations: async() => [],
+    getOperationDefaults: async() => kDefaults,
+    fetchMembers: async() => [],
+    getRepoStats: async() => {
+      return { openMRs: 0, openIssues: 0, branches: 1 };
+    },
+    startGitHubOAuth: async() => {
+      return { user_code: "", verification_uri: "" };
+    },
+    startGitLabOAuth: async() => undefined,
+    cancelOAuth: async() => undefined,
+    onOAuthAuthenticated: () => () => undefined,
+    onOAuthError: () => () => undefined,
+    onOperationsChanged: () => () => undefined,
+    loadPlugin: async() => {
+      return { id: "", name: "", version: "", filePath: "", operations: [], filters: [] };
+    },
+    pickAndLoadPlugin: async() => null,
+    getMissingPlugins: async() => [],
+    listPlugins: async() => [],
+    unloadPlugin: async() => undefined,
+    reloadPlugin: async() => {
+      return { id: "", name: "", version: "", filePath: "", operations: [], filters: [] };
+    },
+    onPluginsChanged: () => () => undefined,
+    listFilters: async() => [],
+    filterRepos: async() => [],
+    onFiltersChanged: () => () => undefined,
+    listHistory: async() => [],
+    recordRun: async() => undefined,
+    listProviders: async() => [],
+    onProvidersChanged: () => () => undefined,
+    ...overrides
+  } as IpcApi;
 }
 
-async function setupRepos(repos: Repo[] = [kRepo]): Promise<void> {
-  mockApiAuthenticate.mock.mockImplementationOnce(async() => [kNamespace]);
-  mockApiLoadRepos.mock.mockImplementationOnce(async() => repos);
-  await getState().authenticate("token", "gitlab");
-  await getState().loadRepos(kNamespace);
-}
+let createStore: typeof import("../stores/app.ts").createStore;
+let applyStatus: typeof import("../stores/app.ts").applyStatus;
 
-beforeEach(() => {
-  getState().reset();
-  mockApiAutoLogin.mock.resetCalls();
-  mockApiAuthenticate.mock.resetCalls();
-  mockApiLoadRepos.mock.resetCalls();
-  mockApiScanRepos.mock.resetCalls();
-  mockApiListOperations.mock.resetCalls();
-  mockApiApplyDiff.mock.resetCalls();
-  mockApiGetOperationDefaults.mock.resetCalls();
-  mockApiRecordRun.mock.resetCalls();
-  mockApiCheckBranchConflicts.mock.resetCalls();
+before(async() => {
+  (globalThis as Record<string, unknown>).window = { api: makeApi() };
+  const mod = await import("../stores/app.ts");
+  createStore = mod.createStore;
+  applyStatus = mod.applyStatus;
 });
+
+async function setupStore(repos: Repo[] = [kRepo], overrides: Partial<IpcApi> = {}) {
+  const store = createStore(makeApi({
+    authenticate: async() => [kNamespace],
+    loadRepos: async() => repos,
+    ...overrides
+  }));
+
+  const state = () => store.getState();
+  await state().authenticate("token", "gitlab");
+  await state().loadRepos(kNamespace);
+
+  return { store, state };
+}
 
 describe("authenticate", () => {
   it("should store namespaces and transition to home step on success", async() => {
     const namespaces: Namespace[] = [kNamespace];
-    mockApiAuthenticate.mock.mockImplementation(async() => namespaces);
+    const store = createStore(makeApi({ authenticate: async() => namespaces }));
+    const state = () => store.getState();
 
-    await getState().authenticate("token", "gitlab");
+    await state().authenticate("token", "gitlab");
 
-    const state = getState();
-    assert.equal(state.step, "home");
-    assert.deepEqual(state.connectedProviders.gitlab, namespaces);
-    assert.equal(state.isLoading, false);
-    assert.equal(state.error, null);
+    const current = state();
+    assert.equal(current.step, "home");
+    assert.deepEqual(current.connectedProviders.gitlab, namespaces);
+    assert.equal(current.isLoading, false);
+    assert.equal(current.error, null);
   });
 
   it("should set error and clear loading on failure", async() => {
-    mockApiAuthenticate.mock.mockImplementation(async() => {
-      throw new Error("Unauthorized");
-    });
+    const store = createStore(makeApi({
+      authenticate: async() => {
+        throw new Error("Unauthorized");
+      }
+    }));
+    const state = () => store.getState();
 
-    await getState().authenticate("bad-token", "gitlab");
+    await state().authenticate("bad-token", "gitlab");
 
-    const state = getState();
-    assert.equal(state.step, "connect");
-    assert.equal(state.error, "Unauthorized");
-    assert.equal(state.isLoading, false);
+    const current = state();
+    assert.equal(current.step, "connect");
+    assert.equal(current.error, "Unauthorized");
+    assert.equal(current.isLoading, false);
   });
 
-  it("should call window.api.authenticate with token and provider", async() => {
-    mockApiAuthenticate.mock.mockImplementation(async() => []);
+  it("should call api.authenticate with token and provider", async() => {
+    let capturedArgs: unknown;
+    const store = createStore(makeApi({
+      authenticate: async(token, provider) => {
+        capturedArgs = [token, provider];
 
-    await getState().authenticate("my-token", "github");
+        return [];
+      }
+    }));
 
-    assert.equal(mockApiAuthenticate.mock.callCount(), 1);
-    assert.deepEqual(mockApiAuthenticate.mock.calls[0].arguments, ["my-token", "github"]);
+    await store.getState().authenticate("my-token", "github");
+
+    assert.deepEqual(capturedArgs, ["my-token", "github"]);
   });
 });
 
 describe("loadRepos", () => {
-  beforeEach(async() => {
-    mockApiAuthenticate.mock.mockImplementation(async() => [kNamespace]);
-    await getState().authenticate("token", "gitlab");
-  });
-
   it("should transition to repos step and store repos on success", async() => {
-    mockApiLoadRepos.mock.mockImplementation(async() => [kRepo]);
+    const { state } = await setupStore([kRepo]);
 
-    await getState().loadRepos(kNamespace);
-
-    const state = getState();
-    assert.equal(state.step, "repos");
-    assert.deepEqual(state.repos, [kRepo]);
-    assert.deepEqual(state.selectedRepoIds, [kRepo.id]);
-    assert.deepEqual(state.selectedNamespace, kNamespace);
-    assert.equal(state.isLoading, false);
-    assert.equal(state.error, null);
+    const current = state();
+    assert.equal(current.step, "repos");
+    assert.deepEqual(current.repos, [kRepo]);
+    assert.deepEqual(current.selectedRepoIds, [kRepo.id]);
+    assert.deepEqual(current.selectedNamespace, kNamespace);
+    assert.equal(current.isLoading, false);
+    assert.equal(current.error, null);
   });
 
   it("should select all repos by default after loading", async() => {
     const repoA: Repo = { ...kRepo, id: "1" };
     const repoB: Repo = { ...kRepo, id: "2" };
-    mockApiLoadRepos.mock.mockImplementation(async() => [repoA, repoB]);
+    const { state } = await setupStore([repoA, repoB]);
 
-    await getState().loadRepos(kNamespace);
-
-    assert.deepEqual(getState().selectedRepoIds, ["1", "2"]);
+    assert.deepEqual(state().selectedRepoIds, ["1", "2"]);
   });
 
   it("should set error and stay on home step on failure", async() => {
-    mockApiLoadRepos.mock.mockImplementation(async() => {
-      throw new Error("Forbidden");
-    });
+    const store = createStore(makeApi({
+      authenticate: async() => [kNamespace],
+      loadRepos: async() => {
+        throw new Error("Forbidden");
+      }
+    }));
+    const state = () => store.getState();
+    await state().authenticate("token", "gitlab");
+    await state().loadRepos(kNamespace);
 
-    await getState().loadRepos(kNamespace);
-
-    const state = getState();
-    assert.equal(state.step, "home");
-    assert.equal(state.error, "Forbidden");
-    assert.equal(state.isLoading, false);
+    const current = state();
+    assert.equal(current.step, "home");
+    assert.equal(current.error, "Forbidden");
+    assert.equal(current.isLoading, false);
   });
 
-  it("should call window.api.loadRepos with namespace name and provider", async() => {
-    mockApiLoadRepos.mock.mockImplementation(async() => []);
+  it("should call api.loadRepos with namespace name and provider", async() => {
+    let capturedArgs: unknown;
+    const store = createStore(makeApi({
+      authenticate: async() => [kNamespace],
+      loadRepos: async(ns, provider) => {
+        capturedArgs = [ns, provider];
 
-    await getState().loadRepos(kNamespace);
+        return [];
+      }
+    }));
+    const state = () => store.getState();
+    await state().authenticate("token", "gitlab");
+    await state().loadRepos(kNamespace);
 
-    assert.equal(mockApiLoadRepos.mock.callCount(), 1);
-    assert.deepEqual(mockApiLoadRepos.mock.calls[0].arguments, [kNamespace.name, kNamespace.provider]);
+    assert.deepEqual(capturedArgs, [kNamespace.name, kNamespace.provider]);
   });
 });
 
 describe("toggleRepo", () => {
-  beforeEach(async() => {
-    await setupRepos([kRepo]);
+  it("should deselect a selected repo", async() => {
+    const { state } = await setupStore([kRepo]);
+
+    state().toggleRepo(kRepo.id);
+
+    assert.deepEqual(state().selectedRepoIds, []);
   });
 
-  it("should deselect a selected repo", () => {
-    getState().toggleRepo(kRepo.id);
+  it("should reselect a deselected repo", async() => {
+    const { state } = await setupStore([kRepo]);
 
-    assert.deepEqual(getState().selectedRepoIds, []);
-  });
+    state().toggleRepo(kRepo.id);
+    state().toggleRepo(kRepo.id);
 
-  it("should reselect a deselected repo", () => {
-    getState().toggleRepo(kRepo.id);
-    getState().toggleRepo(kRepo.id);
-
-    assert.deepEqual(getState().selectedRepoIds, [kRepo.id]);
+    assert.deepEqual(state().selectedRepoIds, [kRepo.id]);
   });
 });
 
 describe("selectAll / deselectAll", () => {
-  const repoA: Repo = { ...kRepo, id: "1" };
-  const repoB: Repo = { ...kRepo, id: "2" };
+  it("should deselect all repos", async() => {
+    const { state } = await setupStore([kRepo, { ...kRepo, id: "2" }]);
 
-  beforeEach(async() => {
-    await setupRepos([repoA, repoB]);
+    state().deselectAll();
+
+    assert.deepEqual(state().selectedRepoIds, []);
   });
 
-  it("should deselect all repos", () => {
-    getState().deselectAll();
+  it("should reselect all repos", async() => {
+    const repoA: Repo = { ...kRepo, id: "1" };
+    const repoB: Repo = { ...kRepo, id: "2" };
+    const { state } = await setupStore([repoA, repoB]);
 
-    assert.deepEqual(getState().selectedRepoIds, []);
-  });
+    state().deselectAll();
+    state().selectAll();
 
-  it("should reselect all repos", () => {
-    getState().deselectAll();
-    getState().selectAll();
-
-    assert.deepEqual(getState().selectedRepoIds, ["1", "2"]);
+    assert.deepEqual(state().selectedRepoIds, ["1", "2"]);
   });
 });
 
 describe("proceedToPickOperation", () => {
-  beforeEach(async() => {
-    await setupRepos([kRepo]);
-  });
+  it("should transition to pick-operation step", async() => {
+    const { state } = await setupStore([kRepo]);
 
-  it("should transition to pick-operation step", () => {
-    getState().proceedToPickOperation();
+    state().proceedToPickOperation();
 
-    assert.equal(getState().step, "pick-operation");
+    assert.equal(state().step, "pick-operation");
   });
 });
 
 describe("backToPickOperation", () => {
-  beforeEach(async() => {
-    await setupRepos([kRepo]);
-    mockApiScanRepos.mock.mockImplementationOnce(async() => [kDiff]);
-    getState().proceedToPickOperation();
-    getState().setSelectedOperation("license-year");
-    await getState().scanRepos();
+  async function setupScan() {
+    const { state } = await setupStore([kRepo], {
+      scanRepos: async() => [kDiff]
+    });
+    state().proceedToPickOperation();
+    state().setSelectedOperation("license-year");
+    await state().scanRepos();
+
+    return { state };
+  }
+
+  it("should transition back to pick-operation step", async() => {
+    const { state } = await setupScan();
+
+    state().backToPickOperation();
+
+    assert.equal(state().step, "pick-operation");
   });
 
-  it("should transition back to pick-operation step", () => {
-    getState().backToPickOperation();
+  it("should clear diffs", async() => {
+    const { state } = await setupScan();
 
-    assert.equal(getState().step, "pick-operation");
-  });
+    state().backToPickOperation();
 
-  it("should clear diffs", () => {
-    getState().backToPickOperation();
-
-    assert.deepEqual(getState().diffs, []);
+    assert.deepEqual(state().diffs, []);
   });
 });
 
 describe("setSelectedOperation", () => {
   it("should update selectedOperationId", () => {
-    getState().setSelectedOperation("gitignore-maintainer");
+    const store = createStore(makeApi());
+    const state = () => store.getState();
 
-    assert.equal(getState().selectedOperationId, "gitignore-maintainer");
+    state().setSelectedOperation("gitignore-maintainer");
+
+    assert.equal(state().selectedOperationId, "gitignore-maintainer");
   });
 
   it("should default to license-year", () => {
-    assert.equal(getState().selectedOperationId, "license-year");
+    const store = createStore(makeApi());
+
+    assert.equal(store.getState().selectedOperationId, "license-year");
   });
 
   it("should not change the current step", () => {
-    getState().setSelectedOperation("gitignore-maintainer");
+    const store = createStore(makeApi());
+    const state = () => store.getState();
 
-    assert.equal(getState().step, "connect");
+    state().setSelectedOperation("gitignore-maintainer");
+
+    assert.equal(state().step, "connect");
   });
 
   it("should reset operationInputs", () => {
-    getState().setOperationInputs({ year: 2030 });
-    getState().setSelectedOperation("gitignore-maintainer");
+    const store = createStore(makeApi());
+    const state = () => store.getState();
 
-    assert.deepEqual(getState().operationInputs, {});
+    state().setOperationInputs({ year: 2030 });
+    state().setSelectedOperation("gitignore-maintainer");
+
+    assert.deepEqual(state().operationInputs, {});
   });
 
   it("should reset operationOverrides", () => {
-    getState().setOperationOverrides({ branchName: "custom/branch" });
-    getState().setSelectedOperation("gitignore-maintainer");
+    const store = createStore(makeApi());
+    const state = () => store.getState();
 
-    assert.deepEqual(getState().operationOverrides, {});
+    state().setOperationOverrides({ branchName: "custom/branch" });
+    state().setSelectedOperation("gitignore-maintainer");
+
+    assert.deepEqual(state().operationOverrides, {});
   });
 });
 
 describe("setOperationOverrides", () => {
   it("should update operationOverrides", () => {
+    const store = createStore(makeApi());
+    const state = () => store.getState();
     const overrides: OperationOverrides = { branchName: "custom/branch", reviewers: ["alice"] };
-    getState().setOperationOverrides(overrides);
 
-    assert.deepEqual(getState().operationOverrides, overrides);
+    state().setOperationOverrides(overrides);
+
+    assert.deepEqual(state().operationOverrides, overrides);
   });
 
   it("should default to empty object", () => {
-    assert.deepEqual(getState().operationOverrides, {});
+    const store = createStore(makeApi());
+
+    assert.deepEqual(store.getState().operationOverrides, {});
   });
 });
 
 describe("scanRepos", () => {
-  beforeEach(async() => {
-    await setupRepos([kRepo]);
-  });
-
   it("should transition to diffs step with returned diffs", async() => {
-    mockApiScanRepos.mock.mockImplementation(async() => [kDiff]);
+    const { state } = await setupStore([kRepo], { scanRepos: async() => [kDiff] });
 
-    await getState().scanRepos();
+    await state().scanRepos();
 
-    const state = getState();
-    assert.equal(state.step, "diffs");
-    assert.equal(state.diffs.length, 1);
-    assert.equal(state.diffs[0].applyStatus, applyStatus.Pending);
-    assert.equal(state.isLoading, false);
+    const current = state();
+    assert.equal(current.step, "diffs");
+    assert.equal(current.diffs.length, 1);
+    assert.equal(current.diffs[0].applyStatus, applyStatus.Pending);
+    assert.equal(current.isLoading, false);
   });
 
-  it("should only pass selected repos to window.api.scanRepos", async() => {
+  it("should only pass selected repos to api.scanRepos", async() => {
     const repoA: Repo = { ...kRepo, id: "1" };
     const repoB: Repo = { ...kRepo, id: "2" };
-    await setupRepos([repoA, repoB]);
+    let passedRepos: Repo[] | undefined;
 
-    getState().toggleRepo("2");
-    mockApiScanRepos.mock.mockImplementation(async() => []);
+    const { state } = await setupStore([repoA, repoB], {
+      scanRepos: async(repos) => {
+        passedRepos = repos;
 
-    await getState().scanRepos();
+        return [];
+      }
+    });
+    state().toggleRepo("2");
+    await state().scanRepos();
 
-    const [passedRepos] = mockApiScanRepos.mock.calls[0].arguments;
     assert.deepEqual(passedRepos, [repoA]);
   });
 
-  it("should pass selectedOperationId to window.api.scanRepos", async() => {
-    mockApiScanRepos.mock.mockImplementation(async() => []);
-    getState().setSelectedOperation("my-op");
+  it("should pass selectedOperationId to api.scanRepos", async() => {
+    let passedOperationId: string | undefined;
 
-    await getState().scanRepos();
+    const { state } = await setupStore([kRepo], {
+      scanRepos: async(_repos, operationId) => {
+        passedOperationId = operationId;
 
-    const [, passedOperationId] = mockApiScanRepos.mock.calls[0].arguments;
+        return [];
+      }
+    });
+    state().setSelectedOperation("my-op");
+    await state().scanRepos();
+
     assert.equal(passedOperationId, "my-op");
   });
 
-  it("should pass operationInputs to window.api.scanRepos", async() => {
-    mockApiScanRepos.mock.mockImplementation(async() => []);
-    getState().setOperationInputs({ year: 2030 });
+  it("should pass operationInputs to api.scanRepos", async() => {
+    let passedInputs: Record<string, unknown> | undefined;
 
-    await getState().scanRepos();
+    const { state } = await setupStore([kRepo], {
+      scanRepos: async(_repos, _id, options) => {
+        passedInputs = options.inputs;
 
-    const [,, passedOptions] = mockApiScanRepos.mock.calls[0].arguments;
-    assert.deepEqual(passedOptions.inputs, { year: 2030 });
+        return [];
+      }
+    });
+    state().setOperationInputs({ year: 2030 });
+    await state().scanRepos();
+
+    assert.deepEqual(passedInputs, { year: 2030 });
   });
 });
 
 describe("applyDiff", () => {
-  beforeEach(async() => {
-    await setupRepos([kRepo]);
-    mockApiScanRepos.mock.mockImplementation(async() => [kDiff]);
-    await getState().scanRepos();
-  });
+  async function setupDiffs(overrides: Partial<IpcApi> = {}) {
+    const { state } = await setupStore([kRepo], {
+      scanRepos: async() => [kDiff],
+      ...overrides
+    });
+    await state().scanRepos();
+
+    return { state };
+  }
 
   it("should set applyStatus to Done and store prUrl on success", async() => {
-    mockApiApplyDiff.mock.mockImplementation(async() => kSubmitResult);
+    const { state } = await setupDiffs({ applyDiff: async() => kSubmitResult });
 
-    await getState().applyDiff(kRepo.fullPath);
+    await state().applyDiff(kRepo.fullPath);
 
-    const diff = getState().diffs[0];
+    const diff = state().diffs[0];
     assert.equal(diff.applyStatus, applyStatus.Done);
     assert.equal(diff.prUrl, kSubmitResult.prUrl);
   });
 
   it("should set applyStatus to Error and store error message on failure", async() => {
-    mockApiApplyDiff.mock.mockImplementation(async() => {
-      throw new Error("Rate limit exceeded");
+    const { state } = await setupDiffs({
+      applyDiff: async() => {
+        throw new Error("Rate limit exceeded");
+      }
     });
 
-    await getState().applyDiff(kRepo.fullPath);
+    await state().applyDiff(kRepo.fullPath);
 
-    const diff = getState().diffs[0];
+    const diff = state().diffs[0];
     assert.equal(diff.applyStatus, applyStatus.Error);
     assert.equal(diff.error, "Rate limit exceeded");
   });
 
   it("should do nothing when the diff is not found", async() => {
-    await getState().applyDiff("unknown/repo");
+    let applyCalled = false;
+    const { state } = await setupDiffs({
+      applyDiff: async() => {
+        applyCalled = true;
 
-    assert.equal(mockApiApplyDiff.mock.callCount(), 0);
+        return kSubmitResult;
+      }
+    });
+
+    await state().applyDiff("unknown/repo");
+
+    assert.equal(applyCalled, false);
   });
 
-  it("should pass selectedOperationId to window.api.applyDiff", async() => {
-    mockApiApplyDiff.mock.mockImplementation(async() => kSubmitResult);
-    getState().setSelectedOperation("my-op");
+  it("should pass selectedOperationId to api.applyDiff", async() => {
+    let passedOperationId: string | undefined;
+    const { state } = await setupDiffs({
+      applyDiff: async(_diff, options) => {
+        passedOperationId = options.operationId;
 
-    await getState().applyDiff(kRepo.fullPath);
+        return kSubmitResult;
+      }
+    });
+    state().setSelectedOperation("my-op");
 
-    const [, passedOptions] = mockApiApplyDiff.mock.calls[0].arguments;
-    assert.equal(passedOptions.operationId, "my-op");
+    await state().applyDiff(kRepo.fullPath);
+
+    assert.equal(passedOperationId, "my-op");
   });
 
-  it("should pass operationOverrides to window.api.applyDiff", async() => {
-    mockApiApplyDiff.mock.mockImplementation(async() => kSubmitResult);
+  it("should pass operationOverrides to api.applyDiff", async() => {
+    let passedOverrides: OperationOverrides | undefined;
     const overrides: OperationOverrides = { branchName: "custom/branch", reviewers: ["alice"] };
-    getState().setOperationOverrides(overrides);
+    const { state } = await setupDiffs({
+      applyDiff: async(_diff, options) => {
+        passedOverrides = options.overrides;
 
-    await getState().applyDiff(kRepo.fullPath);
+        return kSubmitResult;
+      }
+    });
+    state().setOperationOverrides(overrides);
 
-    const [, passedOptions] = mockApiApplyDiff.mock.calls[0].arguments;
-    assert.deepEqual(passedOptions.overrides, overrides);
+    await state().applyDiff(kRepo.fullPath);
+
+    assert.deepEqual(passedOverrides, overrides);
   });
 });
 
@@ -418,128 +509,187 @@ describe("applyAll", () => {
     const repoB: Repo = { ...kRepo, id: "2", fullPath: "ns/repo-b" };
     const diffA: RepoDiff = { ...kDiff, repo: repoA };
     const diffB: RepoDiff = { ...kDiff, repo: repoB };
+    let applyCount = 0;
 
-    await setupRepos([repoA, repoB]);
-    mockApiScanRepos.mock.mockImplementation(async() => [diffA, diffB]);
-    await getState().scanRepos();
-    mockApiApplyDiff.mock.mockImplementation(async() => kSubmitResult);
+    const { state } = await setupStore([repoA, repoB], {
+      scanRepos: async() => [diffA, diffB],
+      applyDiff: async() => {
+        applyCount++;
 
-    await getState().applyAll();
+        return kSubmitResult;
+      }
+    });
+    await state().scanRepos();
+    await state().applyAll();
 
-    assert.equal(mockApiApplyDiff.mock.callCount(), 2);
-    assert.equal(getState().step, "results");
+    assert.equal(applyCount, 2);
+    assert.equal(state().step, "results");
   });
 
   it("should skip diffs that are not pending", async() => {
-    await setupRepos([kRepo]);
-    mockApiScanRepos.mock.mockImplementation(async() => [kDiff]);
-    await getState().scanRepos();
+    let applyCount = 0;
+    const { state } = await setupStore([kRepo], {
+      scanRepos: async() => [kDiff],
+      applyDiff: async() => {
+        applyCount++;
 
-    mockApiApplyDiff.mock.mockImplementation(async() => kSubmitResult);
-    await getState().applyDiff(kRepo.fullPath);
-    mockApiApplyDiff.mock.resetCalls();
+        return kSubmitResult;
+      }
+    });
+    await state().scanRepos();
+    await state().applyDiff(kRepo.fullPath);
+    applyCount = 0;
 
-    await getState().applyAll();
+    await state().applyAll();
 
-    assert.equal(mockApiApplyDiff.mock.callCount(), 0);
+    assert.equal(applyCount, 0);
   });
 });
 
 describe("openApplyModal", () => {
-  beforeEach(async() => {
-    await setupRepos([kRepo]);
-    mockApiScanRepos.mock.mockImplementation(async() => [kDiff]);
-    await getState().scanRepos();
-  });
+  async function setupForModal(overrides: Partial<IpcApi> = {}) {
+    const { state } = await setupStore([kRepo], {
+      scanRepos: async() => [kDiff],
+      ...overrides
+    });
+    await state().scanRepos();
+
+    return { state };
+  }
 
   it("should set applyModalTarget and applyModalRepoPath for single", async() => {
-    await getState().openApplyModal("single", kRepo.fullPath);
+    const { state } = await setupForModal();
 
-    const state = getState();
-    assert.equal(state.applyModalTarget, "single");
-    assert.equal(state.applyModalRepoPath, kRepo.fullPath);
+    await state().openApplyModal("single", kRepo.fullPath);
+
+    const current = state();
+    assert.equal(current.applyModalTarget, "single");
+    assert.equal(current.applyModalRepoPath, kRepo.fullPath);
   });
 
   it("should set applyModalTarget for all", async() => {
-    await getState().openApplyModal("all");
+    const { state } = await setupForModal();
 
-    assert.equal(getState().applyModalTarget, "all");
-    assert.equal(getState().applyModalRepoPath, null);
+    await state().openApplyModal("all");
+
+    assert.equal(state().applyModalTarget, "all");
+    assert.equal(state().applyModalRepoPath, null);
   });
 
   it("should pre-fill operationOverrides with computed defaults", async() => {
-    await getState().openApplyModal("single", kRepo.fullPath);
+    const { state } = await setupForModal();
 
-    assert.deepEqual(getState().operationOverrides, kDefaults);
+    await state().openApplyModal("single", kRepo.fullPath);
+
+    assert.deepEqual(state().operationOverrides, kDefaults);
   });
 
   it("should call getOperationDefaults with selectedOperationId and operationInputs", async() => {
-    getState().setSelectedOperation("my-op");
-    getState().setOperationInputs({ year: 2030 });
+    let capturedId: string | undefined;
+    let capturedInputs: unknown;
 
-    await getState().openApplyModal("all");
+    const { state } = await setupForModal({
+      getOperationDefaults: async(id, inputs) => {
+        capturedId = id; capturedInputs = inputs;
 
-    const [passedId, passedInputs] = mockApiGetOperationDefaults.mock.calls[0].arguments as any[];
-    assert.equal(passedId, "my-op");
-    assert.deepEqual(passedInputs, { year: 2030 });
+        return kDefaults;
+      }
+    });
+    state().setSelectedOperation("my-op");
+    state().setOperationInputs({ year: 2030 });
+
+    await state().openApplyModal("all");
+
+    assert.equal(capturedId, "my-op");
+    assert.deepEqual(capturedInputs, { year: 2030 });
   });
 });
 
 describe("closeApplyModal", () => {
   it("should clear applyModalTarget and applyModalRepoPath", async() => {
-    await setupRepos([kRepo]);
-    await getState().openApplyModal("single", kRepo.fullPath);
-    getState().closeApplyModal();
+    const { state } = await setupStore([kRepo], { scanRepos: async() => [kDiff] });
+    await state().openApplyModal("single", kRepo.fullPath);
 
-    assert.equal(getState().applyModalTarget, null);
-    assert.equal(getState().applyModalRepoPath, null);
+    state().closeApplyModal();
+
+    assert.equal(state().applyModalTarget, null);
+    assert.equal(state().applyModalRepoPath, null);
   });
 });
 
 describe("confirmApply", () => {
-  beforeEach(async() => {
-    await setupRepos([kRepo]);
-    mockApiScanRepos.mock.mockImplementation(async() => [kDiff]);
-    await getState().scanRepos();
-    mockApiApplyDiff.mock.mockImplementation(async() => kSubmitResult);
-  });
+  async function setupForConfirm(overrides: Partial<IpcApi> = {}) {
+    const { state } = await setupStore([kRepo], {
+      scanRepos: async() => [kDiff],
+      applyDiff: async() => kSubmitResult,
+      ...overrides
+    });
+    await state().scanRepos();
+
+    return { state };
+  }
 
   it("should call applyDiff and close modal when target is single", async() => {
-    await getState().openApplyModal("single", kRepo.fullPath);
-    await getState().confirmApply();
+    let applyCalled = 0;
+    const { state } = await setupForConfirm({
+      applyDiff: async() => {
+        applyCalled++;
 
-    assert.equal(mockApiApplyDiff.mock.callCount(), 1);
-    assert.equal(getState().applyModalTarget, null);
+        return kSubmitResult;
+      }
+    });
+    await state().openApplyModal("single", kRepo.fullPath);
+    await state().confirmApply();
+
+    assert.equal(applyCalled, 1);
+    assert.equal(state().applyModalTarget, null);
   });
 
   it("should call applyAll and close modal when target is all", async() => {
-    await getState().openApplyModal("all");
-    await getState().confirmApply();
+    let applyCalled = 0;
+    const { state } = await setupForConfirm({
+      applyDiff: async() => {
+        applyCalled++;
 
-    assert.equal(mockApiApplyDiff.mock.callCount(), 1);
-    assert.equal(getState().applyModalTarget, null);
-    assert.equal(getState().step, "results");
+        return kSubmitResult;
+      }
+    });
+    await state().openApplyModal("all");
+    await state().confirmApply();
+
+    assert.equal(applyCalled, 1);
+    assert.equal(state().applyModalTarget, null);
+    assert.equal(state().step, "results");
   });
 
   it("should do nothing when applyModalTarget is null", async() => {
-    await getState().confirmApply();
+    let applyCalled = 0;
+    const { state } = await setupForConfirm({
+      applyDiff: async() => {
+        applyCalled++;
 
-    assert.equal(mockApiApplyDiff.mock.callCount(), 0);
+        return kSubmitResult;
+      }
+    });
+
+    await state().confirmApply();
+
+    assert.equal(applyCalled, 0);
   });
 });
 
 describe("reset", () => {
   it("should restore initial state", async() => {
-    await setupRepos([kRepo]);
+    const { state } = await setupStore([kRepo]);
 
-    getState().reset();
+    state().reset();
 
-    const state = getState();
-    assert.equal(state.step, "connect");
-    assert.deepEqual(state.repos, []);
-    assert.deepEqual(state.connectedProviders, {});
-    assert.equal(state.selectedNamespace, null);
-    assert.deepEqual(state.selectedRepoIds, []);
-    assert.equal(state.error, null);
+    const current = state();
+    assert.equal(current.step, "connect");
+    assert.deepEqual(current.repos, []);
+    assert.deepEqual(current.connectedProviders, {});
+    assert.equal(current.selectedNamespace, null);
+    assert.deepEqual(current.selectedRepoIds, []);
+    assert.equal(current.error, null);
   });
 });

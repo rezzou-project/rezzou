@@ -28,12 +28,14 @@ describe("registry.register", () => {
     registry.unregister("fake-op");
   });
 
-  it("should emit a change event", (t) => {
-    const onChange = t.mock.fn();
-    registry.once("change", onChange);
+  it("should emit a change event", () => {
+    let callCount = 0;
+    registry.once("change", () => {
+      callCount++;
+    });
 
     registry.register(kFakeOperation);
-    assert.equal(onChange.mock.callCount(), 1);
+    assert.equal(callCount, 1);
 
     registry.unregister("fake-op");
   });
@@ -50,13 +52,16 @@ describe("registry.unregister", () => {
     );
   });
 
-  it("should emit a change event", (t) => {
+  it("should emit a change event", () => {
     registry.register(kFakeOperation);
-    const onChange = t.mock.fn();
-    registry.once("change", onChange);
+
+    let callCount = 0;
+    registry.once("change", () => {
+      callCount++;
+    });
 
     registry.unregister("fake-op");
-    assert.equal(onChange.mock.callCount(), 1);
+    assert.equal(callCount, 1);
   });
 });
 

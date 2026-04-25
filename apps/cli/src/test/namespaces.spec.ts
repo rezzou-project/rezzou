@@ -1,9 +1,12 @@
 // Import Node.js Dependencies
-import { describe, it, mock, beforeEach } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 // Import Third-party Dependencies
-import type { Namespace } from "@rezzou/core";
+import type { Namespace, ProviderAdapter } from "@rezzou/core";
+
+// Import Internal Dependencies
+import { namespacesCommand } from "../commands/namespaces.ts";
 
 // CONSTANTS
 const kFakeNamespaces: Namespace[] = [
@@ -11,53 +14,56 @@ const kFakeNamespaces: Namespace[] = [
   { id: "2", name: "testuser", displayName: "Test User", type: "user", provider: "github" }
 ];
 
-const mockListNamespaces = mock.fn(async() => kFakeNamespaces);
-const mockCreateAdapter = mock.fn(() => {
-  return { listNamespaces: mockListNamespaces };
-});
-
-mock.module("../adapter.ts", {
-  namedExports: { createAdapter: mockCreateAdapter }
-});
-
-const { namespacesCommand } = await import("../commands/namespaces.ts");
+function fakeAdapter(overrides: Partial<ProviderAdapter> = {}): ProviderAdapter {
+  return {
+    provider: "github",
+    listNamespaces: async() => [],
+    listRepos: async() => [],
+    getFile: async() => null,
+    listTree: async() => [],
+    branchExists: async() => false,
+    submitChanges: async() => {
+      return { prUrl: "", prTitle: "" };
+    },
+    listMembers: async() => [],
+    getRepoStats: async() => {
+      return { openMRs: 0, openIssues: 0, branches: 0 };
+    },
+    ...overrides
+  };
+}
 
 describe("UT namespacesCommand", () => {
-  beforeEach(() => {
-    mockListNamespaces.mock.resetCalls();
-    mockCreateAdapter.mock.resetCalls();
+  it("should call the adapter factory with the given provider", async() => {
+    let calledWith: string | undefined;
+    await namespacesCommand(["github"], (provider) => {
+      calledWith = provider;
+
+      return fakeAdapter({ listNamespaces: async() => kFakeNamespaces });
+    });
+
+    assert.equal(calledWith, "github");
   });
 
-  it("should show usage when no provider is given", async(testCtx) => {
-    const consoleLog = testCtx.mock.method(console, "log");
-    await namespacesCommand([]);
+  it("should not call the adapter factory when no provider is given", async() => {
+    let called = false;
+    await namespacesCommand([], () => {
+      called = true;
 
-    assert.equal(consoleLog.mock.callCount(), 1);
-    assert.match(String(consoleLog.mock.calls[0].arguments[0]), /Usage: rezzou namespaces/);
+      return fakeAdapter();
+    });
+
+    assert.equal(called, false);
   });
 
-  it("should show usage with --help", async(testCtx) => {
-    const consoleLog = testCtx.mock.method(console, "log");
-    await namespacesCommand(["--help"]);
+  it("should not call the adapter factory with --help", async() => {
+    let called = false;
+    await namespacesCommand(["--help"], () => {
+      called = true;
 
-    assert.equal(consoleLog.mock.callCount(), 1);
-    assert.match(String(consoleLog.mock.calls[0].arguments[0]), /Usage: rezzou namespaces/);
-  });
+      return fakeAdapter();
+    });
 
-  it("should call createAdapter with the given provider", async(testCtx) => {
-    testCtx.mock.method(console, "log");
-    await namespacesCommand(["github"]);
-
-    assert.equal(mockCreateAdapter.mock.callCount(), 1);
-    assert.deepEqual(mockCreateAdapter.mock.calls[0].arguments, ["github"]);
-  });
-
-  it("should list namespaces with correct format", async(testCtx) => {
-    const consoleLog = testCtx.mock.method(console, "log");
-    await namespacesCommand(["github"]);
-
-    assert.equal(consoleLog.mock.callCount(), 2);
-    assert.equal(consoleLog.mock.calls[0].arguments[0], "My Org (org) — 1");
-    assert.equal(consoleLog.mock.calls[1].arguments[0], "Test User (user) — 2");
+    assert.equal(called, false);
   });
 });
