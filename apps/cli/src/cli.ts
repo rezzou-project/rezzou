@@ -8,6 +8,7 @@ import { namespacesCommand } from "./commands/namespaces.ts";
 import { pluginCommand } from "./commands/plugin.ts";
 import { reposCommand } from "./commands/repos.ts";
 import { scanCommand } from "./commands/scan.ts";
+import { applyCommand } from "./commands/apply.ts";
 
 // CONSTANTS
 const kRequire = createRequire(import.meta.url);
@@ -20,6 +21,7 @@ Commands:
   repos [provider] [namespace]            List repositories in a namespace
   plugin <subcommand>                     Manage plugins (add | list | remove)
   scan [provider] [namespace] [options]   Scan repos with an operation (dry-run)
+  apply [provider] [namespace] [options]  Apply an operation and open PRs/MRs
 
 Options:
   -h, --help     Show this help message
@@ -32,7 +34,8 @@ const kCommands = new Map<string, CommandHandler>([
   ["namespaces", namespacesCommand],
   ["plugin", pluginCommand],
   ["repos", reposCommand],
-  ["scan", scanCommand]
+  ["scan", scanCommand],
+  ["apply", applyCommand]
 ]);
 
 export async function run(args: string[]): Promise<void> {
