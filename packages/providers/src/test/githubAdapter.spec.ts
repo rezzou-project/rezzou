@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 // Import Third-party Dependencies
-import { MockAgent, fetch as undiciFetch, type MockPool } from "@openally/httpie";
+import { MockAgent, fetch as undiciFetch, type MockPool } from "undici";
 
 // Import Internal Dependencies
 import { GitHubAdapter } from "../github.ts";
@@ -14,13 +14,14 @@ const kGithubOrigin = "https://api.github.com";
 const kJson = { headers: { "content-type": "application/json" } };
 
 type InterceptOptions = Parameters<MockPool["intercept"]>[0];
+type InterceptBody = Parameters<ReturnType<MockPool["intercept"]>["reply"]>[1];
 
 function createTestSetup() {
   const mockAgent = new MockAgent();
   mockAgent.disableNetConnect();
   const mockPool = mockAgent.get(kGithubOrigin);
 
-  function intercept(options: InterceptOptions, status: number, body: unknown) {
+  function intercept(options: InterceptOptions, status: number, body: InterceptBody) {
     return mockPool.intercept(options).reply(status, body, kJson);
   }
 

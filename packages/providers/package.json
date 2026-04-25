@@ -37,6 +37,6 @@
     "@rezzou/core": "*"
   },
   "devDependencies": {
-    "@openally/httpie": "^1.1.2"
+    "undici": "^7.24.4"
   }
 }
