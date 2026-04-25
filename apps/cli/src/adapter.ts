@@ -3,9 +3,14 @@ import { GitHubAdapter, GitLabAdapter } from "@rezzou/providers";
 import type { ProviderAdapter } from "@rezzou/core";
 
 // Import Internal Dependencies
-import { loadToken } from "./credentials.ts";
+import { loadToken as defaultLoadToken } from "./credentials.ts";
 
-export function createAdapter(provider: string): ProviderAdapter {
+interface CreateAdapterDeps {
+  loadToken?: (provider: string) => string | null;
+}
+
+export function createAdapter(provider: string, deps: CreateAdapterDeps = {}): ProviderAdapter {
+  const { loadToken = defaultLoadToken } = deps;
   const token = loadToken(provider);
 
   if (token === null) {

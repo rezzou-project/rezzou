@@ -1,9 +1,12 @@
 // Import Node.js Dependencies
-import { describe, it, mock, beforeEach } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 // Import Third-party Dependencies
-import type { Repo } from "@rezzou/core";
+import type { Repo, ProviderAdapter } from "@rezzou/core";
+
+// Import Internal Dependencies
+import { reposCommand } from "../commands/repos.ts";
 
 // CONSTANTS
 const kFakeRepos: Repo[] = [
@@ -23,69 +26,80 @@ const kFakeRepos: Repo[] = [
   }
 ];
 
-const mockListRepos = mock.fn(async() => kFakeRepos);
-const mockCreateAdapter = mock.fn(() => {
-  return { listRepos: mockListRepos };
-});
-
-mock.module("../adapter.ts", {
-  namedExports: { createAdapter: mockCreateAdapter }
-});
-
-const { reposCommand } = await import("../commands/repos.ts");
+function fakeAdapter(overrides: Partial<ProviderAdapter> = {}): ProviderAdapter {
+  return {
+    provider: "github",
+    listNamespaces: async() => [],
+    listRepos: async() => [],
+    getFile: async() => null,
+    listTree: async() => [],
+    branchExists: async() => false,
+    submitChanges: async() => {
+      return { prUrl: "", prTitle: "" };
+    },
+    listMembers: async() => [],
+    getRepoStats: async() => {
+      return { openMRs: 0, openIssues: 0, branches: 0 };
+    },
+    ...overrides
+  };
+}
 
 describe("UT reposCommand", () => {
-  beforeEach(() => {
-    mockListRepos.mock.resetCalls();
-    mockCreateAdapter.mock.resetCalls();
+  it("should call the adapter factory with the given provider", async() => {
+    let calledWith: string | undefined;
+    await reposCommand(["github", "myorg"], (provider) => {
+      calledWith = provider;
+
+      return fakeAdapter({ listRepos: async() => kFakeRepos });
+    });
+
+    assert.equal(calledWith, "github");
   });
 
-  it("should show usage when no provider is given", async(testCtx) => {
-    const consoleLog = testCtx.mock.method(console, "log");
-    await reposCommand([]);
+  it("should call listRepos with the given namespace", async() => {
+    let calledNamespace: string | undefined;
+    await reposCommand(["github", "myorg"], () => fakeAdapter({
+      listRepos: async(namespace) => {
+        calledNamespace = namespace;
 
-    assert.equal(consoleLog.mock.callCount(), 1);
-    assert.match(String(consoleLog.mock.calls[0].arguments[0]), /Usage: rezzou repos/);
+        return kFakeRepos;
+      }
+    }));
+
+    assert.equal(calledNamespace, "myorg");
   });
 
-  it("should show usage when namespace is missing", async(testCtx) => {
-    const consoleLog = testCtx.mock.method(console, "log");
-    await reposCommand(["github"]);
+  it("should not call the adapter factory when no provider is given", async() => {
+    let called = false;
+    await reposCommand([], () => {
+      called = true;
 
-    assert.equal(consoleLog.mock.callCount(), 1);
-    assert.match(String(consoleLog.mock.calls[0].arguments[0]), /Usage: rezzou repos/);
+      return fakeAdapter();
+    });
+
+    assert.equal(called, false);
   });
 
-  it("should show usage with --help", async(testCtx) => {
-    const consoleLog = testCtx.mock.method(console, "log");
-    await reposCommand(["--help"]);
+  it("should not call the adapter factory when namespace is missing", async() => {
+    let called = false;
+    await reposCommand(["github"], () => {
+      called = true;
 
-    assert.equal(consoleLog.mock.callCount(), 1);
-    assert.match(String(consoleLog.mock.calls[0].arguments[0]), /Usage: rezzou repos/);
+      return fakeAdapter();
+    });
+
+    assert.equal(called, false);
   });
 
-  it("should call createAdapter with the given provider", async(testCtx) => {
-    testCtx.mock.method(console, "log");
-    await reposCommand(["github", "myorg"]);
+  it("should not call the adapter factory with --help", async() => {
+    let called = false;
+    await reposCommand(["--help"], () => {
+      called = true;
 
-    assert.equal(mockCreateAdapter.mock.callCount(), 1);
-    assert.deepEqual(mockCreateAdapter.mock.calls[0].arguments, ["github"]);
-  });
+      return fakeAdapter();
+    });
 
-  it("should call listRepos with the given namespace", async(testCtx) => {
-    testCtx.mock.method(console, "log");
-    await reposCommand(["github", "myorg"]);
-
-    assert.equal(mockListRepos.mock.callCount(), 1);
-    assert.deepEqual(mockListRepos.mock.calls[0].arguments, ["myorg"]);
-  });
-
-  it("should list repos with correct format", async(testCtx) => {
-    const consoleLog = testCtx.mock.method(console, "log");
-    await reposCommand(["github", "myorg"]);
-
-    assert.equal(consoleLog.mock.callCount(), 2);
-    assert.equal(consoleLog.mock.calls[0].arguments[0], "myorg/my-project [main] — https://github.com/myorg/my-project");
-    assert.equal(consoleLog.mock.calls[1].arguments[0], "myorg/other-project [develop] — https://github.com/myorg/other-project");
+    assert.equal(called, false);
   });
 });

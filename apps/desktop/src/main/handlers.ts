@@ -12,6 +12,7 @@ import {
   type ProviderAdapter,
   type OperationDefaults,
   type OperationOverrides,
+  type Operation,
   type Member,
   type RepoStats
 } from "@rezzou/core";
@@ -30,15 +31,26 @@ const kGitHubScopes = "repo read:org";
 const kGitLabScopes = "api read_user";
 const kSlowDownIncrement = 5;
 
+interface HandleAuthenticateDeps {
+  createAdapter?: (token: string, provider: string) => ProviderAdapter | Promise<ProviderAdapter>;
+}
+
 export async function handleAuthenticate(
   token: string,
-  provider: string
+  provider: string,
+  deps: HandleAuthenticateDeps = {}
 ): Promise<{ adapter: ProviderAdapter; namespaces: Namespace[]; }> {
-  const descriptor = providerRegistry.get(provider);
-  if (!descriptor) {
-    throw new Error(`Unknown provider: "${provider}"`);
+  let adapter: ProviderAdapter;
+  if (deps.createAdapter) {
+    adapter = await Promise.resolve(deps.createAdapter(token, provider));
   }
-  const adapter = await Promise.resolve(descriptor.create(token));
+  else {
+    const descriptor = providerRegistry.get(provider);
+    if (!descriptor) {
+      throw new Error(`Unknown provider: "${provider}"`);
+    }
+    adapter = await Promise.resolve(descriptor.create(token));
+  }
   const namespaces = await adapter.listNamespaces();
 
   return { adapter, namespaces };
@@ -54,6 +66,8 @@ export async function handleLoadRepos(
 export interface HandleScanReposOptions {
   operationId: string;
   inputs: Record<string, unknown>;
+  scanReposFn?: typeof scanRepos;
+  getOperationFn?: (id: string) => Operation;
 }
 
 export async function handleScanRepos(
@@ -61,16 +75,9 @@ export async function handleScanRepos(
   repos: Repo[],
   options: HandleScanReposOptions
 ): Promise<RepoDiff[]> {
-  const { operationId, inputs } = options;
+  const { operationId, inputs, scanReposFn = scanRepos, getOperationFn = getOperation } = options;
 
-  return scanRepos(
-    adapter,
-    repos,
-    {
-      operation: getOperation(operationId),
-      inputs
-    }
-  );
+  return scanReposFn(adapter, repos, { operation: getOperationFn(operationId), inputs });
 }
 
 export interface ApplyDiffOptions {
@@ -81,13 +88,20 @@ export interface ApplyDiffOptions {
   force?: boolean;
 }
 
+interface HandleApplyDiffDeps {
+  applyRepoDiffFn?: typeof applyRepoDiff;
+  getOperationFn?: (id: string) => Operation;
+}
+
 export async function handleApplyDiff(
   adapter: ProviderAdapter,
-  options: ApplyDiffOptions
+  options: ApplyDiffOptions,
+  deps: HandleApplyDiffDeps = {}
 ): Promise<SubmitResult> {
   const { diff, inputs, operationId, overrides, force } = options;
+  const { applyRepoDiffFn = applyRepoDiff, getOperationFn = getOperation } = deps;
 
-  return applyRepoDiff(adapter, diff, { operation: getOperation(operationId), inputs, overrides, force });
+  return applyRepoDiffFn(adapter, diff, { operation: getOperationFn(operationId), inputs, overrides, force });
 }
 
 export interface CheckBranchConflictsOptions {
@@ -115,11 +129,12 @@ export async function handleCheckBranchConflicts(
 export interface GetOperationDefaultsOptions {
   operationId: string;
   inputs: Record<string, unknown>;
+  getOperationFn?: (id: string) => Operation;
 }
 
 export async function handleGetOperationDefaults(options: GetOperationDefaultsOptions): Promise<OperationDefaults> {
-  const { operationId, inputs } = options;
-  const operation = getOperation(operationId);
+  const { operationId, inputs, getOperationFn = getOperation } = options;
+  const operation = getOperationFn(operationId);
 
   return {
     branchName: await operation.branchName(inputs),
@@ -151,8 +166,16 @@ export interface GitHubDeviceFlowStart {
   expires_in: number;
 }
 
-export async function handleGitHubDeviceStart(clientId: string): Promise<GitHubDeviceFlowStart> {
-  const response = await fetch(kGitHubDeviceCodeUrl, {
+interface HandleGitHubDeviceStartDeps {
+  fetchFn?: typeof fetch;
+}
+
+export async function handleGitHubDeviceStart(
+  clientId: string,
+  deps: HandleGitHubDeviceStartDeps = {}
+): Promise<GitHubDeviceFlowStart> {
+  const { fetchFn = fetch } = deps;
+  const response = await fetchFn(kGitHubDeviceCodeUrl, {
     method: "POST",
     headers: { Accept: "application/json", "Content-Type": "application/json" },
     body: JSON.stringify({ client_id: clientId, scope: kGitHubScopes })
@@ -170,10 +193,11 @@ export interface GitHubDevicePollOptions {
   deviceCode: string;
   interval: number;
   signal: AbortSignal;
+  fetchFn?: typeof fetch;
 }
 
 export async function handleGitHubDevicePoll(options: GitHubDevicePollOptions): Promise<string> {
-  const { clientId, deviceCode, signal } = options;
+  const { clientId, deviceCode, signal, fetchFn = fetch } = options;
   let pollInterval = options.interval;
 
   while (true) {
@@ -185,7 +209,7 @@ export async function handleGitHubDevicePoll(options: GitHubDevicePollOptions): 
       }, { once: true });
     });
 
-    const response = await fetch(kGitHubAccessTokenUrl, {
+    const response = await fetchFn(kGitHubAccessTokenUrl, {
       method: "POST",
       headers: { Accept: "application/json", "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -231,12 +255,16 @@ export function handleGitLabOAuthStart(clientId: string): GitLabOAuthStartResult
   return { url: authUrl.toString(), verifier };
 }
 
-export async function handleGitLabOAuthCallback(
-  clientId: string,
-  code: string,
-  verifier: string
-): Promise<string> {
-  const response = await fetch(kGitLabTokenUrl, {
+export interface HandleGitLabOAuthCallbackOptions {
+  clientId: string;
+  code: string;
+  verifier: string;
+  fetchFn?: typeof fetch;
+}
+
+export async function handleGitLabOAuthCallback(options: HandleGitLabOAuthCallbackOptions): Promise<string> {
+  const { clientId, code, verifier, fetchFn = fetch } = options;
+  const response = await fetchFn(kGitLabTokenUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify({

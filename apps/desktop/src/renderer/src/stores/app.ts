@@ -12,7 +12,7 @@ import type {
 } from "@rezzou/core";
 
 // Import Internal Dependencies
-import type { SerializedRezzouError } from "../../../shared/ipc-channels.ts";
+import type { IpcApi, SerializedRezzouError } from "../../../shared/ipc-channels.ts";
 
 // CONSTANTS
 const kConcurrency = 5;
@@ -165,12 +165,22 @@ const kInitialState: AppState = {
   historyEntries: []
 };
 
-export const useAppStore = create<AppState & AppActions>((set, get) => {
+export function createStore(api: IpcApi) {
+  return create<AppState & AppActions>((set, get) => buildStoreContent(set, get, api));
+}
+
+export const useAppStore = createStore(window.api);
+
+function buildStoreContent(
+  set: (partial: Partial<AppState & AppActions> | ((state: AppState & AppActions) => Partial<AppState & AppActions>)) => void,
+  get: () => AppState & AppActions,
+  api: IpcApi
+): AppState & AppActions {
   return {
     ...kInitialState,
 
     autoLogin: async() => {
-      const sessions = await window.api.autoLogin();
+      const sessions = await api.autoLogin();
       if (sessions !== null && sessions.length > 0) {
         const connectedProviders: Partial<Record<Provider, Namespace[]>> = {};
         for (const { provider, namespaces } of sessions) {
@@ -184,7 +194,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
       set({ isLoading: true, error: null });
 
       try {
-        const namespaces = await window.api.authenticate(token, provider);
+        const namespaces = await api.authenticate(token, provider);
 
         set((state) => {
           return {
@@ -222,7 +232,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
     },
 
     goToHistory: async() => {
-      const entries = await window.api.listHistory();
+      const entries = await api.listHistory();
       set({ historyEntries: entries, step: "history" });
     },
 
@@ -230,7 +240,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
       set({ isLoading: true, error: null });
 
       try {
-        const repos = await window.api.loadRepos(namespace.name, namespace.provider);
+        const repos = await api.loadRepos(namespace.name, namespace.provider);
 
         set((state) => {
           return {
@@ -266,7 +276,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
         await Promise.all(
           batch.map(async(repo) => {
             try {
-              const stats = await window.api.getRepoStats(repo.fullPath, selectedNamespace!.provider);
+              const stats = await api.getRepoStats(repo.fullPath, selectedNamespace!.provider);
               set((state) => {
                 return { repoStats: { ...state.repoStats, [repo.id]: stats } };
               });
@@ -318,7 +328,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
 
       set({ isFilteringRepos: true });
       try {
-        const passingIds = await window.api.filterRepos(repos, newActiveFilterIds, get().selectedNamespace!.provider);
+        const passingIds = await api.filterRepos(repos, newActiveFilterIds, get().selectedNamespace!.provider);
         set({ filteredRepoIds: passingIds, isFilteringRepos: false });
       }
       catch {
@@ -354,7 +364,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
 
     openApplyModal: async(target: "single" | "all", repoPath?: string) => {
       const { selectedOperationId, operationInputs } = get();
-      const defaults = await window.api.getOperationDefaults(selectedOperationId, operationInputs);
+      const defaults = await api.getOperationDefaults(selectedOperationId, operationInputs);
       set({
         applyModalTarget: target,
         applyModalRepoPath: repoPath ?? null,
@@ -380,7 +390,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
         ? diffs.filter((diff) => diff.applyStatus === applyStatus.Pending).map((diff) => diff.repo.fullPath)
         : [applyModalRepoPath!];
 
-      const conflictingPaths = await window.api.checkBranchConflicts(repoPaths, branchName, selectedNamespace!.provider);
+      const conflictingPaths = await api.checkBranchConflicts(repoPaths, branchName, selectedNamespace!.provider);
 
       if (conflictingPaths.length > 0) {
         set({
@@ -455,7 +465,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
 
       try {
         const selectedRepos = repos.filter((repo) => selectedRepoIds.includes(repo.id));
-        const baseDiffs = await window.api.scanRepos(
+        const baseDiffs = await api.scanRepos(
           selectedRepos,
           selectedOperationId,
           { inputs: operationInputs, provider: selectedNamespace!.provider }
@@ -505,7 +515,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
       });
 
       try {
-        const result: SubmitResult = await window.api.applyDiff(
+        const result: SubmitResult = await api.applyDiff(
           diff,
           {
             inputs: operationInputs,
@@ -575,7 +585,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
         });
 
         if (results.length > 0) {
-          await window.api.recordRun({
+          await api.recordRun({
             operationId: selectedOperationId,
             namespace: selectedNamespace?.displayName ?? "",
             results
@@ -595,4 +605,4 @@ export const useAppStore = create<AppState & AppActions>((set, get) => {
       void get().autoLogin();
     }
   };
-});
+}

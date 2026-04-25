@@ -1,5 +1,5 @@
 // Import Node.js Dependencies
-import { describe, it, mock, beforeEach, after } from "node:test";
+import { describe, it, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -10,11 +10,7 @@ const kTmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "rezzou-test-"));
 const kPluginsDir = path.join(kTmpHome, ".rezzou");
 const kPluginsFile = path.join(kPluginsDir, "plugins.json");
 
-mock.module("node:os", {
-  namedExports: {
-    homedir: () => kTmpHome
-  }
-});
+process.env.HOME = kTmpHome;
 
 const { readPluginPaths, addPluginPath } = await import("../plugins-store.ts");
 

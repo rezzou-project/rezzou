@@ -1,86 +1,58 @@
 // Import Node.js Dependencies
-import { describe, it, mock } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-await mock.module("@codemirror/lang-javascript", {
-  namedExports: {
-    javascript: (opts?: unknown) => {
-      return { name: "javascript", opts };
-    }
-  }
-});
-await mock.module("@codemirror/lang-json", {
-  namedExports: {
-    json: () => {
-      return { name: "json" };
-    }
-  }
-});
-await mock.module("@codemirror/lang-markdown", {
-  namedExports: {
-    markdown: () => {
-      return { name: "markdown" };
-    }
-  }
-});
-await mock.module("@codemirror/lang-css", {
-  namedExports: {
-    css: () => {
-      return { name: "css" };
-    }
-  }
-});
-await mock.module("@codemirror/lang-html", {
-  namedExports: {
-    html: () => {
-      return { name: "html" };
-    }
-  }
-});
-await mock.module("@codemirror/language", {
-  namedExports: {
-    LanguageSupport: class {}
-  }
-});
-
-const { detectLanguage } = await import("../utils/languageDetect.ts");
+// Import Internal Dependencies
+import { detectLanguage } from "../utils/languageDetect.ts";
 
 describe("UT detectLanguage", () => {
-  it("should detect .ts as JavaScript (typescript)", () => {
-    const result = detectLanguage("src/index.ts") as { name: string; opts: unknown; };
-    assert.equal(result.name, "javascript");
+  it("should detect .ts as TypeScript", () => {
+    const result = detectLanguage("src/index.ts");
+
+    assert.ok(result !== null);
+    assert.equal(result.language.name, "typescript");
   });
 
   it("should detect .js as JavaScript", () => {
-    const result = detectLanguage("index.js") as { name: string; };
-    assert.equal(result.name, "javascript");
+    const result = detectLanguage("index.js");
+
+    assert.ok(result !== null);
+    assert.equal(result.language.name, "javascript");
   });
 
-  it("should detect .tsx as JavaScript (jsx + typescript)", () => {
-    const result = detectLanguage("App.tsx") as { name: string; opts: { jsx: boolean; typescript: boolean; }; };
-    assert.equal(result.name, "javascript");
-    assert.equal(result.opts.jsx, true);
-    assert.equal(result.opts.typescript, true);
+  it("should detect .tsx as TypeScript", () => {
+    const result = detectLanguage("App.tsx");
+
+    assert.ok(result !== null);
+    assert.equal(result.language.name, "typescript");
   });
 
   it("should detect .json as JSON", () => {
-    const result = detectLanguage("package.json") as { name: string; };
-    assert.equal(result.name, "json");
+    const result = detectLanguage("package.json");
+
+    assert.ok(result !== null);
+    assert.equal(result.language.name, "json");
   });
 
   it("should detect .md as Markdown", () => {
-    const result = detectLanguage("README.md") as { name: string; };
-    assert.equal(result.name, "markdown");
+    const result = detectLanguage("README.md");
+
+    assert.ok(result !== null);
+    assert.equal(result.language.name, "markdown");
   });
 
   it("should detect .css as CSS", () => {
-    const result = detectLanguage("styles.css") as { name: string; };
-    assert.equal(result.name, "css");
+    const result = detectLanguage("styles.css");
+
+    assert.ok(result !== null);
+    assert.equal(result.language.name, "css");
   });
 
   it("should detect .html as HTML", () => {
-    const result = detectLanguage("index.html") as { name: string; };
-    assert.equal(result.name, "html");
+    const result = detectLanguage("index.html");
+
+    assert.ok(result !== null);
+    assert.equal(result.language.name, "html");
   });
 
   it("should return null for unknown extensions", () => {
@@ -90,7 +62,9 @@ describe("UT detectLanguage", () => {
   });
 
   it("should be case-insensitive for extensions", () => {
-    const result = detectLanguage("Config.JSON") as { name: string; };
-    assert.equal(result.name, "json");
+    const result = detectLanguage("Config.JSON");
+
+    assert.ok(result !== null);
+    assert.equal(result.language.name, "json");
   });
 });

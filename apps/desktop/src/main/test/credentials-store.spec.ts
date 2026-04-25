@@ -12,38 +12,25 @@ const kCredentialsFile = path.join(kRezzouDir, "credentials.json");
 const kEncryptedBuffer = Buffer.from("encrypted-token");
 const kDecryptedToken = "my-secret-token";
 
-const mockState = {
-  encryptionAvailable: true,
-  decryptShouldThrow: false
-};
+process.env.HOME = kTmpHome;
 
-const mockIsEncryptionAvailable = mock.fn(() => mockState.encryptionAvailable);
-const mockEncryptString = mock.fn((_token: string) => kEncryptedBuffer);
-const mockDecryptString = mock.fn((_buf: Buffer) => {
-  if (mockState.decryptShouldThrow) {
-    throw new Error("decrypt error");
-  }
-
-  return kDecryptedToken;
-});
-
-mock.module("electron", {
-  namedExports: {
-    safeStorage: {
-      isEncryptionAvailable: mockIsEncryptionAvailable,
-      encryptString: mockEncryptString,
-      decryptString: mockDecryptString
-    }
-  }
-});
-
-mock.module("node:os", {
-  namedExports: {
-    homedir: () => kTmpHome
-  }
-});
+// electron is a CJS module with no named ESM exports — mock it so the module can load.
+// The actual safeStorage is injected via IoC in every test call; this stub is never invoked.
+mock.module("electron", { namedExports: { safeStorage: null } });
 
 const { saveCredentials, loadSavedCredentials } = await import("../credentials-store.ts");
+
+const kStorageOk = {
+  isEncryptionAvailable: () => true,
+  encryptString: (_token: string) => kEncryptedBuffer,
+  decryptString: (_buf: Buffer) => kDecryptedToken
+};
+
+const kStorageUnavailable = {
+  isEncryptionAvailable: () => false,
+  encryptString: (_token: string) => kEncryptedBuffer,
+  decryptString: (_buf: Buffer) => kDecryptedToken
+};
 
 after(() => {
   fs.rmSync(kTmpHome, { recursive: true, force: true });
@@ -52,24 +39,18 @@ after(() => {
 describe("credentials-store", () => {
   describe("saveCredentials", () => {
     beforeEach(() => {
-      mockState.encryptionAvailable = true;
-      mockIsEncryptionAvailable.mock.resetCalls();
-      mockEncryptString.mock.resetCalls();
       fs.rmSync(kRezzouDir, { recursive: true, force: true });
     });
 
     it("should throw when encryption is not available", () => {
-      mockState.encryptionAvailable = false;
-
       assert.throws(
-        () => saveCredentials(kDecryptedToken, "github"),
+        () => saveCredentials(kDecryptedToken, "github", kStorageUnavailable),
         { message: /encryption is not available/i }
       );
-      assert.equal(mockEncryptString.mock.callCount(), 0);
     });
 
     it("should write encrypted credentials to disk", () => {
-      saveCredentials(kDecryptedToken, "github");
+      saveCredentials(kDecryptedToken, "github", kStorageOk);
 
       assert.ok(fs.existsSync(kCredentialsFile));
       const content = JSON.parse(fs.readFileSync(kCredentialsFile, "utf-8")) as Record<string, string>;
@@ -77,8 +58,8 @@ describe("credentials-store", () => {
     });
 
     it("should preserve existing credentials when adding a new provider", () => {
-      saveCredentials(kDecryptedToken, "github");
-      saveCredentials(kDecryptedToken, "gitlab");
+      saveCredentials(kDecryptedToken, "github", kStorageOk);
+      saveCredentials(kDecryptedToken, "gitlab", kStorageOk);
 
       const content = JSON.parse(fs.readFileSync(kCredentialsFile, "utf-8")) as Record<string, string>;
       assert.ok(typeof content.github === "string");
@@ -88,14 +69,11 @@ describe("credentials-store", () => {
 
   describe("loadSavedCredentials", () => {
     beforeEach(() => {
-      mockState.encryptionAvailable = true;
-      mockState.decryptShouldThrow = false;
-      mockDecryptString.mock.resetCalls();
       fs.rmSync(kRezzouDir, { recursive: true, force: true });
     });
 
     it("should return an empty array when no credentials file exists", () => {
-      const result = loadSavedCredentials();
+      const result = loadSavedCredentials(kStorageOk);
 
       assert.deepEqual(result, []);
     });
@@ -106,7 +84,7 @@ describe("credentials-store", () => {
         github: kEncryptedBuffer.toString("base64")
       }));
 
-      const result = loadSavedCredentials();
+      const result = loadSavedCredentials(kStorageOk);
 
       assert.equal(result.length, 1);
       assert.equal(result[0].provider, "github");
@@ -114,13 +92,20 @@ describe("credentials-store", () => {
     });
 
     it("should skip a provider whose decryption fails", () => {
-      mockState.decryptShouldThrow = true;
+      const storageThrows = {
+        isEncryptionAvailable: () => true,
+        encryptString: (_token: string) => kEncryptedBuffer,
+        decryptString: (_buf: Buffer): string => {
+          throw new Error("decrypt error");
+        }
+      };
+
       fs.mkdirSync(kRezzouDir, { recursive: true });
       fs.writeFileSync(kCredentialsFile, JSON.stringify({
         github: kEncryptedBuffer.toString("base64")
       }));
 
-      const result = loadSavedCredentials();
+      const result = loadSavedCredentials(storageThrows);
 
       assert.deepEqual(result, []);
     });
@@ -129,7 +114,7 @@ describe("credentials-store", () => {
       fs.mkdirSync(kRezzouDir, { recursive: true });
       fs.writeFileSync(kCredentialsFile, "not-json");
 
-      const result = loadSavedCredentials();
+      const result = loadSavedCredentials(kStorageOk);
 
       assert.deepEqual(result, []);
     });

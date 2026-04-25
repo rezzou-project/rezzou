@@ -8,24 +8,6 @@ import type { LanguageSupport } from "@codemirror/language";
 
 type LanguageExtension = LanguageSupport | null;
 
-const kExtensionMap: Record<string, () => LanguageExtension> = {
-  ".js": () => javascript(),
-  ".mjs": () => javascript(),
-  ".cjs": () => javascript(),
-  ".jsx": () => javascript({ jsx: true }),
-  ".ts": () => javascript({ typescript: true }),
-  ".mts": () => javascript({ typescript: true }),
-  ".cts": () => javascript({ typescript: true }),
-  ".tsx": () => javascript({ jsx: true, typescript: true }),
-  ".json": () => json(),
-  ".jsonc": () => json(),
-  ".md": () => markdown(),
-  ".mdx": () => markdown(),
-  ".css": () => css(),
-  ".html": () => html(),
-  ".htm": () => html()
-};
-
 export function detectLanguage(filePath: string): LanguageExtension {
   const dot = filePath.lastIndexOf(".");
   if (dot === -1) {
@@ -33,7 +15,32 @@ export function detectLanguage(filePath: string): LanguageExtension {
   }
 
   const ext = filePath.slice(dot).toLowerCase();
-  const factory = kExtensionMap[ext];
 
-  return factory ? factory() : null;
+  switch (ext) {
+    case ".js":
+    case ".mjs":
+    case ".cjs":
+      return javascript();
+    case ".jsx":
+      return javascript({ jsx: true });
+    case ".ts":
+    case ".mts":
+    case ".cts":
+      return javascript({ typescript: true });
+    case ".tsx":
+      return javascript({ jsx: true, typescript: true });
+    case ".json":
+    case ".jsonc":
+      return json();
+    case ".md":
+    case ".mdx":
+      return markdown();
+    case ".css":
+      return css();
+    case ".html":
+    case ".htm":
+      return html();
+    default:
+      return null;
+  }
 }

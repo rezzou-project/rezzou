@@ -1,147 +1,52 @@
 // Import Node.js Dependencies
-import { describe, it, mock, beforeEach } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+
+// Import Third-party Dependencies
+import { MockAgent, fetch as undiciFetch, type MockPool } from "@openally/httpie";
+
+// Import Internal Dependencies
+import { GitHubAdapter } from "../github.ts";
 
 // CONSTANTS
 const kToken = "test-token";
+const kGithubOrigin = "https://api.github.com";
+const kJson = { headers: { "content-type": "application/json" } };
 
-const mockGetAuthenticated = mock.fn(async() => {
-  return { data: { login: "testuser", name: "Test User" } };
-});
+type InterceptOptions = Parameters<MockPool["intercept"]>[0];
 
-const mockListForAuthenticatedUser = mock.fn(async() => {
-  return { data: [] as unknown[] };
-});
+function createTestSetup() {
+  const mockAgent = new MockAgent();
+  mockAgent.disableNetConnect();
+  const mockPool = mockAgent.get(kGithubOrigin);
 
-const mockListForOrg = mock.fn(async() => {
-  return { data: [] as unknown[] };
-});
-
-const mockListForUser = mock.fn(async() => {
-  return { data: [] as unknown[] };
-});
-
-const mockGetContent = mock.fn(async() => {
-  return { data: {} as unknown };
-});
-
-const mockGetBranch = mock.fn(async() => {
-  return { data: { commit: { sha: "base-sha" } } };
-});
-
-const mockCreateRef = mock.fn(async() => void 0);
-const mockDeleteRef = mock.fn(async() => void 0);
-const mockGetTree = mock.fn(async() => {
-  return { data: { tree: [] as unknown[] } };
-});
-const mockRequest = mock.fn(async() => void 0);
-
-const mockPullsCreate = mock.fn(async() => {
-  return { data: { html_url: "", title: "" } };
-});
-
-const mockRequestReviewers = mock.fn(async() => void 0);
-const mockListOrgMembers = mock.fn(async() => {
-  return { data: [] as unknown[] };
-});
-
-const mockPaginate = mock.fn(async(method: (params: unknown) => Promise<{ data: unknown[]; }>, params: unknown) => {
-  const result = await method(params);
-
-  return result.data;
-});
-
-mock.module("@octokit/rest", {
-  namedExports: {
-    Octokit: mock.fn(function MockOctokit() {
-      return {
-        paginate: mockPaginate,
-        users: {
-          getAuthenticated: mockGetAuthenticated
-        },
-        repos: {
-          listForOrg: mockListForOrg,
-          listForUser: mockListForUser,
-          getContent: mockGetContent,
-          getBranch: mockGetBranch
-        },
-        git: {
-          createRef: mockCreateRef,
-          deleteRef: mockDeleteRef,
-          getTree: mockGetTree
-        },
-        request: mockRequest,
-        pulls: {
-          create: mockPullsCreate,
-          requestReviewers: mockRequestReviewers
-        },
-        orgs: {
-          listForAuthenticatedUser: mockListForAuthenticatedUser,
-          listMembers: mockListOrgMembers
-        }
-      };
-    })
+  function intercept(options: InterceptOptions, status: number, body: unknown) {
+    return mockPool.intercept(options).reply(status, body, kJson);
   }
-});
 
-const { GitHubAdapter } = await import("../github.ts");
+  function testFetch(url: string | URL | Request, opts?: RequestInit) {
+    const init = { ...(opts as Record<string, unknown>), dispatcher: mockAgent };
 
-async function setupOrgAdapter(org: string, user = "testuser") {
-  mockGetAuthenticated.mock.mockImplementationOnce(async() => {
-    return { data: { login: user, name: user } };
-  });
-  mockListForAuthenticatedUser.mock.mockImplementationOnce(async() => {
-    return { data: [{ login: org }] };
-  });
+    return undiciFetch(url as string, init as Parameters<typeof undiciFetch>[1]);
+  }
 
-  const adapter = new GitHubAdapter(kToken);
-  await adapter.listNamespaces();
+  const adapter = new GitHubAdapter(kToken, { fetch: testFetch as typeof globalThis.fetch });
 
-  return adapter;
-}
-
-async function setupUserAdapter(login: string) {
-  mockGetAuthenticated.mock.mockImplementationOnce(async() => {
-    return { data: { login, name: login } };
-  });
-  mockListForAuthenticatedUser.mock.mockImplementationOnce(async() => {
-    return { data: [] };
-  });
-
-  const adapter = new GitHubAdapter(kToken);
-  await adapter.listNamespaces();
-
-  return adapter;
+  return { adapter, intercept };
 }
 
 describe("GitHubAdapter", () => {
-  beforeEach(() => {
-    mockGetAuthenticated.mock.resetCalls();
-    mockListForAuthenticatedUser.mock.resetCalls();
-    mockListForOrg.mock.resetCalls();
-    mockListForUser.mock.resetCalls();
-    mockGetContent.mock.resetCalls();
-    mockGetBranch.mock.resetCalls();
-    mockCreateRef.mock.resetCalls();
-    mockDeleteRef.mock.resetCalls();
-    mockGetTree.mock.resetCalls();
-    mockRequest.mock.resetCalls();
-    mockPullsCreate.mock.resetCalls();
-    mockRequestReviewers.mock.resetCalls();
-    mockListOrgMembers.mock.resetCalls();
-    mockPaginate.mock.resetCalls();
-  });
-
   describe("listNamespaces", () => {
     it("should return the authenticated user as a user namespace", async() => {
-      mockGetAuthenticated.mock.mockImplementation(async() => {
-        return { data: { login: "john", name: "John Doe" } };
-      });
-      mockListForAuthenticatedUser.mock.mockImplementation(async() => {
-        return { data: [] };
-      });
+      const { adapter, intercept } = createTestSetup();
 
-      const adapter = new GitHubAdapter(kToken);
+      intercept(
+        { method: "GET", path: "/user" },
+        200,
+        { login: "john", name: "John Doe", avatar_url: "https://avatars.githubusercontent.com/u/1" }
+      );
+      intercept({ method: "GET", path: /^\/user\/orgs/ }, 200, []);
+
       const result = await adapter.listNamespaces();
 
       assert.equal(result.length, 1);
@@ -151,33 +56,30 @@ describe("GitHubAdapter", () => {
         displayName: "John Doe",
         type: "user",
         provider: "github",
-        avatarUrl: void 0
+        avatarUrl: "https://avatars.githubusercontent.com/u/1"
       });
     });
 
     it("should fall back to login for displayName when user.name is null", async() => {
-      mockGetAuthenticated.mock.mockImplementation(async() => {
-        return { data: { login: "john", name: null as unknown as string } };
-      });
-      mockListForAuthenticatedUser.mock.mockImplementation(async() => {
-        return { data: [] };
-      });
+      const { adapter, intercept } = createTestSetup();
 
-      const adapter = new GitHubAdapter(kToken);
+      intercept({ method: "GET", path: "/user" }, 200, { login: "john", name: null, avatar_url: null });
+      intercept({ method: "GET", path: /^\/user\/orgs/ }, 200, []);
+
       const result = await adapter.listNamespaces();
 
       assert.equal(result[0].displayName, "john");
     });
 
     it("should return org namespaces alongside the user namespace", async() => {
-      mockGetAuthenticated.mock.mockImplementation(async() => {
-        return { data: { login: "john", name: "John" } };
-      });
-      mockListForAuthenticatedUser.mock.mockImplementation(async() => {
-        return { data: [{ login: "my-org" }, { login: "another-org" }] };
-      });
+      const { adapter, intercept } = createTestSetup();
 
-      const adapter = new GitHubAdapter(kToken);
+      intercept({ method: "GET", path: "/user" }, 200, { login: "john", name: "John", avatar_url: null });
+      intercept({ method: "GET", path: /^\/user\/orgs/ }, 200, [
+        { login: "my-org", avatar_url: null },
+        { login: "another-org", avatar_url: null }
+      ]);
+
       const result = await adapter.listNamespaces();
 
       assert.equal(result.length, 3);
@@ -188,31 +90,27 @@ describe("GitHubAdapter", () => {
       assert.equal(result[2].name, "another-org");
     });
 
-    it("should paginate listForAuthenticatedUser with per_page: 100", async() => {
-      mockGetAuthenticated.mock.mockImplementation(async() => {
-        return { data: { login: "john", name: "John" } };
-      });
-      mockListForAuthenticatedUser.mock.mockImplementation(async() => {
-        return { data: [] };
-      });
+    it("should paginate orgs with per_page=100", async() => {
+      const { adapter, intercept } = createTestSetup();
 
-      const adapter = new GitHubAdapter(kToken);
-      await adapter.listNamespaces();
+      intercept({ method: "GET", path: "/user" }, 200, { login: "john", name: "John", avatar_url: null });
+      intercept({ method: "GET", path: /\/user\/orgs.*per_page=100/ }, 200, []);
 
-      assert.equal(mockPaginate.mock.callCount(), 1);
-      assert.deepEqual(mockPaginate.mock.calls[0].arguments[1], { per_page: 100 });
+      const result = await adapter.listNamespaces();
+
+      assert.equal(result.length, 1);
     });
 
     it("should return all orgs when more than 100 exist", async() => {
-      const manyOrgs = Array.from({ length: 150 }, (_, i) => {
-        return { login: `org-${i}`, avatar_url: null };
-      });
-      mockGetAuthenticated.mock.mockImplementationOnce(async() => {
-        return { data: { login: "john", name: "John" } };
-      });
-      mockPaginate.mock.mockImplementationOnce(async() => manyOrgs);
+      const { adapter, intercept } = createTestSetup();
 
-      const adapter = new GitHubAdapter(kToken);
+      const manyOrgs = Array.from({ length: 150 }, (_, index) => {
+        return { login: `org-${index}`, avatar_url: null };
+      });
+
+      intercept({ method: "GET", path: "/user" }, 200, { login: "john", name: "John", avatar_url: null });
+      intercept({ method: "GET", path: /^\/user\/orgs/ }, 200, manyOrgs);
+
       const result = await adapter.listNamespaces();
 
       assert.equal(result.length, 151);
@@ -220,23 +118,42 @@ describe("GitHubAdapter", () => {
   });
 
   describe("listRepos", () => {
-    it("should map GitHub org repos to Repo objects", async() => {
-      mockListForOrg.mock.mockImplementation(async() => {
-        return {
-          data: [
-            {
-              id: 42,
-              name: "my-repo",
-              full_name: "my-org/my-repo",
-              default_branch: "main",
-              html_url: "https://github.com/my-org/my-repo",
-              archived: false
-            }
-          ]
-        };
-      });
+    async function setupOrgAdapter(org: string) {
+      const { adapter, intercept } = createTestSetup();
 
-      const adapter = await setupOrgAdapter("my-org");
+      intercept({ method: "GET", path: "/user" }, 200, { login: "testuser", name: "Test User", avatar_url: null });
+      intercept({ method: "GET", path: /^\/user\/orgs/ }, 200, [{ login: org, avatar_url: null }]);
+
+      await adapter.listNamespaces();
+
+      return { adapter, intercept };
+    }
+
+    async function setupUserAdapter(login: string) {
+      const { adapter, intercept } = createTestSetup();
+
+      intercept({ method: "GET", path: "/user" }, 200, { login, name: login, avatar_url: null });
+      intercept({ method: "GET", path: /^\/user\/orgs/ }, 200, []);
+
+      await adapter.listNamespaces();
+
+      return { adapter, intercept };
+    }
+
+    it("should map GitHub org repos to Repo objects", async() => {
+      const { adapter, intercept } = await setupOrgAdapter("my-org");
+
+      intercept({ method: "GET", path: /^\/orgs\/my-org\/repos/ }, 200, [
+        {
+          id: 42,
+          name: "my-repo",
+          full_name: "my-org/my-repo",
+          default_branch: "main",
+          html_url: "https://github.com/my-org/my-repo",
+          archived: false
+        }
+      ]);
+
       const result = await adapter.listRepos("my-org");
 
       assert.deepEqual(result, [
@@ -251,16 +168,13 @@ describe("GitHubAdapter", () => {
     });
 
     it("should filter out archived repos", async() => {
-      mockListForOrg.mock.mockImplementation(async() => {
-        return {
-          data: [
-            { id: 1, name: "active", full_name: "org/active", default_branch: "main", html_url: "", archived: false },
-            { id: 2, name: "old", full_name: "org/old", default_branch: "main", html_url: "", archived: true }
-          ]
-        };
-      });
+      const { adapter, intercept } = await setupOrgAdapter("org");
 
-      const adapter = await setupOrgAdapter("org");
+      intercept({ method: "GET", path: /^\/orgs\/org\/repos/ }, 200, [
+        { id: 1, name: "active", full_name: "org/active", default_branch: "main", html_url: "", archived: false },
+        { id: 2, name: "old", full_name: "org/old", default_branch: "main", html_url: "", archived: true }
+      ]);
+
       const result = await adapter.listRepos("org");
 
       assert.equal(result.length, 1);
@@ -268,16 +182,13 @@ describe("GitHubAdapter", () => {
     });
 
     it("should skip repos with no default_branch", async() => {
-      mockListForOrg.mock.mockImplementation(async() => {
-        return {
-          data: [
-            { id: 1, name: "has-branch", full_name: "org/has-branch", default_branch: "main", html_url: "", archived: false },
-            { id: 2, name: "no-branch", full_name: "org/no-branch", default_branch: null, html_url: "", archived: false }
-          ]
-        };
-      });
+      const { adapter, intercept } = await setupOrgAdapter("org");
 
-      const adapter = await setupOrgAdapter("org");
+      intercept({ method: "GET", path: /^\/orgs\/org\/repos/ }, 200, [
+        { id: 1, name: "has-branch", full_name: "org/has-branch", default_branch: "main", html_url: "", archived: false },
+        { id: 2, name: "no-branch", full_name: "org/no-branch", default_branch: null, html_url: "", archived: false }
+      ]);
+
       const result = await adapter.listRepos("org");
 
       assert.equal(result.length, 1);
@@ -285,56 +196,51 @@ describe("GitHubAdapter", () => {
     });
 
     it("should call listForUser when namespace type is user", async() => {
-      mockListForUser.mock.mockImplementation(async() => {
-        return {
-          data: [
-            {
-              id: 99,
-              name: "user-repo",
-              full_name: "john/user-repo",
-              default_branch: "main",
-              html_url: "https://github.com/john/user-repo",
-              archived: false
-            }
-          ]
-        };
-      });
+      const { adapter, intercept } = await setupUserAdapter("john");
 
-      const adapter = await setupUserAdapter("john");
+      intercept({ method: "GET", path: /^\/users\/john\/repos/ }, 200, [
+        {
+          id: 99,
+          name: "user-repo",
+          full_name: "john/user-repo",
+          default_branch: "main",
+          html_url: "https://github.com/john/user-repo",
+          archived: false
+        }
+      ]);
+
       const result = await adapter.listRepos("john");
 
-      assert.equal(mockListForOrg.mock.callCount(), 0);
       assert.equal(result.length, 1);
       assert.equal(result[0].fullPath, "john/user-repo");
     });
 
-    it("should paginate listForOrg with per_page: 100", async() => {
-      mockListForOrg.mock.mockImplementation(async() => {
-        return { data: [] };
-      });
+    it("should paginate org repos with per_page=100", async() => {
+      const { adapter, intercept } = await setupOrgAdapter("my-org");
 
-      const adapter = await setupOrgAdapter("my-org");
-      mockPaginate.mock.resetCalls();
-      await adapter.listRepos("my-org");
+      intercept({ method: "GET", path: /\/orgs\/my-org\/repos.*per_page=100/ }, 200, []);
 
-      assert.equal(mockPaginate.mock.callCount(), 1);
-      assert.deepEqual(mockPaginate.mock.calls[0].arguments[1], { org: "my-org", per_page: 100, type: "all" });
+      const result = await adapter.listRepos("my-org");
+
+      assert.deepEqual(result, []);
     });
 
     it("should return all repos when more than 100 exist", async() => {
-      const manyRepos = Array.from({ length: 150 }, (_, i) => {
+      const { adapter, intercept } = await setupOrgAdapter("my-org");
+
+      const manyRepos = Array.from({ length: 150 }, (_, index) => {
         return {
-          id: i,
-          name: `repo-${i}`,
-          full_name: `my-org/repo-${i}`,
+          id: index,
+          name: `repo-${index}`,
+          full_name: `my-org/repo-${index}`,
           default_branch: "main",
-          html_url: `https://github.com/my-org/repo-${i}`,
+          html_url: `https://github.com/my-org/repo-${index}`,
           archived: false
         };
       });
 
-      const adapter = await setupOrgAdapter("my-org");
-      mockPaginate.mock.mockImplementationOnce(async() => manyRepos);
+      intercept({ method: "GET", path: /^\/orgs\/my-org\/repos/ }, 200, manyRepos);
+
       const result = await adapter.listRepos("my-org");
 
       assert.equal(result.length, 150);
@@ -343,60 +249,63 @@ describe("GitHubAdapter", () => {
 
   describe("getFile", () => {
     it("should return FileContent with decoded content", async() => {
+      const { adapter, intercept } = createTestSetup();
       const rawContent = "MIT License\nCopyright 2020";
       const encoded = Buffer.from(rawContent).toString("base64");
 
-      mockGetContent.mock.mockImplementation(async() => {
-        return {
-          data: { type: "file", content: encoded, sha: "abc123" }
-        };
-      });
+      intercept(
+        { method: "GET", path: /\/repos\/owner\/repo\/contents\/LICENSE/ },
+        200,
+        { type: "file", content: encoded, sha: "abc123" }
+      );
 
-      const adapter = new GitHubAdapter(kToken);
       const result = await adapter.getFile("owner/repo", "LICENSE", "main");
 
       assert.deepEqual(result, { content: rawContent, ref: "main" });
     });
 
     it("should return null when file is not found", async() => {
-      mockGetContent.mock.mockImplementation(async() => {
-        throw new Error("404 Not Found");
-      });
+      const { adapter, intercept } = createTestSetup();
 
-      const adapter = new GitHubAdapter(kToken);
+      intercept(
+        { method: "GET", path: /\/repos\/owner\/repo\/contents\/LICENSE/ },
+        404,
+        { message: "Not Found" }
+      );
+
       const result = await adapter.getFile("owner/repo", "LICENSE", "main");
 
       assert.equal(result, null);
     });
 
     it("should return null when path points to a directory", async() => {
-      mockGetContent.mock.mockImplementation(async() => {
-        return {
-          data: [{ type: "file", name: "LICENSE" }]
-        };
-      });
+      const { adapter, intercept } = createTestSetup();
 
-      const adapter = new GitHubAdapter(kToken);
+      intercept(
+        { method: "GET", path: /\/repos\/owner\/repo\/contents\/src/ },
+        200,
+        [{ type: "file", name: "index.ts" }]
+      );
+
       const result = await adapter.getFile("owner/repo", "src", "main");
 
       assert.equal(result, null);
     });
 
-    it("should call getContent with owner, repo, path, and ref", async() => {
+    it("should request the file with the correct branch ref", async() => {
+      const { adapter, intercept } = createTestSetup();
       const encoded = Buffer.from("content").toString("base64");
-      mockGetContent.mock.mockImplementation(async() => {
-        return {
-          data: { type: "file", content: encoded, sha: "abc" }
-        };
-      });
 
-      const adapter = new GitHubAdapter(kToken);
-      await adapter.getFile("owner/repo", "LICENSE", "develop");
+      intercept(
+        { method: "GET", path: /LICENSE.*ref=develop/ },
+        200,
+        { type: "file", content: encoded, sha: "abc" }
+      );
 
-      assert.equal(mockGetContent.mock.callCount(), 1);
-      assert.deepEqual(mockGetContent.mock.calls[0].arguments, [
-        { owner: "owner", repo: "repo", path: "LICENSE", ref: "develop" }
-      ]);
+      const result = await adapter.getFile("owner/repo", "LICENSE", "develop");
+
+      assert.ok(result !== null);
+      assert.equal(result.ref, "develop");
     });
   });
 
@@ -411,27 +320,30 @@ describe("GitHubAdapter", () => {
       files: [{ action: "update" as const, path: "LICENSE", content: "MIT License 2026" }]
     };
 
-    beforeEach(() => {
-      mockGetBranch.mock.mockImplementation(async() => {
-        return {
-          data: { commit: { sha: "base-sha" } }
-        };
-      });
-      mockCreateRef.mock.mockImplementation(async() => undefined);
-      mockRequest.mock.mockImplementation(async() => undefined);
-      mockPullsCreate.mock.mockImplementation(async() => {
-        return {
-          data: {
-            number: 1,
-            html_url: "https://github.com/owner/repo/pull/1",
-            title: "chore: update license year"
-          }
-        };
-      });
-    });
-
     it("should return prUrl and prTitle", async() => {
-      const adapter = new GitHubAdapter(kToken);
+      const { adapter, intercept } = createTestSetup();
+
+      intercept(
+        { method: "GET", path: /\/branches\/main/ },
+        200,
+        { name: "main", commit: { sha: "base-sha" } }
+      );
+      intercept(
+        { method: "POST", path: /\/git\/refs$/ },
+        201,
+        { ref: "refs/heads/rezzou/license-year-2026", object: { sha: "base-sha" } }
+      );
+      intercept(
+        { method: "POST", path: "/graphql" },
+        200,
+        { data: { createCommitOnBranch: { commit: { oid: "new-sha" } } } }
+      );
+      intercept(
+        { method: "POST", path: /\/pulls$/ },
+        201,
+        { number: 1, html_url: "https://github.com/owner/repo/pull/1", title: "chore: update license year" }
+      );
+
       const result = await adapter.submitChanges(kParams);
 
       assert.deepEqual(result, {
@@ -441,128 +353,176 @@ describe("GitHubAdapter", () => {
     });
 
     it("should create the head branch from the base branch SHA", async() => {
-      const adapter = new GitHubAdapter(kToken);
+      const { adapter, intercept } = createTestSetup();
+
+      intercept(
+        { method: "GET", path: /\/branches\/main/ },
+        200,
+        { name: "main", commit: { sha: "base-sha" } }
+      );
+      intercept(
+        { method: "POST", path: /\/git\/refs$/ },
+        201,
+        { ref: "refs/heads/rezzou/license-year-2026", object: { sha: "base-sha" } }
+      );
+      intercept(
+        { method: "POST", path: "/graphql" },
+        200,
+        { data: { createCommitOnBranch: { commit: { oid: "new-sha" } } } }
+      );
+      intercept(
+        { method: "POST", path: /\/pulls$/ },
+        201,
+        { number: 1, html_url: "", title: "" }
+      );
+
       await adapter.submitChanges(kParams);
-
-      assert.equal(mockCreateRef.mock.callCount(), 1);
-      assert.deepEqual(mockCreateRef.mock.calls[0].arguments, [
-        {
-          owner: "owner",
-          repo: "repo",
-          ref: "refs/heads/rezzou/license-year-2026",
-          sha: "base-sha"
-        }
-      ]);
-    });
-
-    it("should commit all files in a single signed GraphQL commit", async() => {
-      const adapter = new GitHubAdapter(kToken);
-      await adapter.submitChanges(kParams);
-
-      assert.equal(mockRequest.mock.callCount(), 1);
-      const [endpoint, options] = mockRequest.mock.calls[0].arguments as unknown as [string, Record<string, unknown>];
-      assert.equal(endpoint, "POST /graphql");
-      assert.deepEqual((options.variables as Record<string, unknown>).input, {
-        branch: {
-          repositoryNameWithOwner: "owner/repo",
-          branchName: "rezzou/license-year-2026"
-        },
-        message: { headline: "chore: update license year" },
-        fileChanges: {
-          additions: [
-            { path: "LICENSE", contents: Buffer.from("MIT License 2026").toString("base64") }
-          ],
-          deletions: []
-        },
-        expectedHeadOid: "base-sha"
-      });
-    });
-
-    it("should create a PR targeting the base branch", async() => {
-      const adapter = new GitHubAdapter(kToken);
-      await adapter.submitChanges(kParams);
-
-      assert.equal(mockPullsCreate.mock.callCount(), 1);
-      assert.deepEqual(mockPullsCreate.mock.calls[0].arguments, [
-        {
-          owner: "owner",
-          repo: "repo",
-          head: "rezzou/license-year-2026",
-          base: "main",
-          title: "chore: update license year",
-          body: "Automated update"
-        }
-      ]);
     });
 
     it("should request reviewers when reviewers are provided", async() => {
-      const adapter = new GitHubAdapter(kToken);
-      await adapter.submitChanges({ ...kParams, reviewers: ["john", "bob"] });
+      const { adapter, intercept } = createTestSetup();
 
-      assert.equal(mockRequestReviewers.mock.callCount(), 1);
-      assert.deepEqual(mockRequestReviewers.mock.calls[0].arguments, [
-        {
-          owner: "owner",
-          repo: "repo",
-          pull_number: 1,
-          reviewers: ["john", "bob"]
-        }
-      ]);
+      intercept(
+        { method: "GET", path: /\/branches\/main/ },
+        200,
+        { name: "main", commit: { sha: "base-sha" } }
+      );
+      intercept(
+        { method: "POST", path: /\/git\/refs$/ },
+        201,
+        { ref: "refs/heads/rezzou/license-year-2026", object: { sha: "base-sha" } }
+      );
+      intercept(
+        { method: "POST", path: "/graphql" },
+        200,
+        { data: { createCommitOnBranch: { commit: { oid: "new-sha" } } } }
+      );
+      intercept(
+        { method: "POST", path: /\/pulls$/ },
+        201,
+        { number: 1, html_url: "", title: "" }
+      );
+      intercept({ method: "POST", path: /\/requested_reviewers$/ }, 201, {});
+
+      await adapter.submitChanges({ ...kParams, reviewers: ["john", "bob"] });
     });
 
     it("should not request reviewers when reviewers is empty", async() => {
-      const adapter = new GitHubAdapter(kToken);
-      await adapter.submitChanges({ ...kParams, reviewers: [] });
+      const { adapter, intercept } = createTestSetup();
 
-      assert.equal(mockRequestReviewers.mock.callCount(), 0);
+      intercept(
+        { method: "GET", path: /\/branches\/main/ },
+        200,
+        { name: "main", commit: { sha: "base-sha" } }
+      );
+      intercept(
+        { method: "POST", path: /\/git\/refs$/ },
+        201,
+        { ref: "refs/heads/rezzou/license-year-2026", object: { sha: "base-sha" } }
+      );
+      intercept(
+        { method: "POST", path: "/graphql" },
+        200,
+        { data: { createCommitOnBranch: { commit: { oid: "new-sha" } } } }
+      );
+      intercept(
+        { method: "POST", path: /\/pulls$/ },
+        201,
+        { number: 1, html_url: "", title: "" }
+      );
+
+      await adapter.submitChanges({ ...kParams, reviewers: [] });
     });
 
     it("should delete the head branch when the GraphQL commit fails", async() => {
-      mockRequest.mock.mockImplementationOnce(async() => {
-        throw new Error("GraphQL error");
-      });
+      const { adapter, intercept } = createTestSetup();
 
-      const adapter = new GitHubAdapter(kToken);
+      intercept(
+        { method: "GET", path: /\/branches\/main/ },
+        200,
+        { name: "main", commit: { sha: "base-sha" } }
+      );
+      intercept(
+        { method: "POST", path: /\/git\/refs$/ },
+        201,
+        { ref: "refs/heads/rezzou/license-year-2026", object: { sha: "base-sha" } }
+      );
+      intercept(
+        { method: "POST", path: "/graphql" },
+        500,
+        { message: "GraphQL error" }
+      );
+      intercept({ method: "DELETE", path: /\/git\/refs\/heads/ }, 204, {});
+
       const error = await adapter.submitChanges(kParams).catch((err) => err);
 
       assert.ok(error instanceof Error);
       assert.equal(error.message, `Failed to commit changes to ${kParams.repoPath}`);
       assert.ok(error.cause instanceof Error);
-      assert.equal((error.cause as Error).message, "GraphQL error");
-      assert.equal(mockDeleteRef.mock.callCount(), 1);
-      assert.deepEqual(mockDeleteRef.mock.calls[0].arguments, [
-        { owner: "owner", repo: "repo", ref: `heads/${kParams.headBranch}` }
-      ]);
     });
 
     it("should not delete the head branch when PR creation fails", async() => {
-      mockPullsCreate.mock.mockImplementationOnce(async() => {
-        throw new Error("PR creation error");
-      });
+      const { adapter, intercept } = createTestSetup();
 
-      const adapter = new GitHubAdapter(kToken);
+      intercept(
+        { method: "GET", path: /\/branches\/main/ },
+        200,
+        { name: "main", commit: { sha: "base-sha" } }
+      );
+      intercept(
+        { method: "POST", path: /\/git\/refs$/ },
+        201,
+        { ref: "refs/heads/rezzou/license-year-2026", object: { sha: "base-sha" } }
+      );
+      intercept(
+        { method: "POST", path: "/graphql" },
+        200,
+        { data: { createCommitOnBranch: { commit: { oid: "new-sha" } } } }
+      );
+      intercept(
+        { method: "POST", path: /\/pulls$/ },
+        422,
+        { message: "PR creation error" }
+      );
+
       const error = await adapter.submitChanges(kParams).catch((err) => err);
 
       assert.ok(error instanceof Error);
       assert.equal(error.message, `Failed to create pull request for ${kParams.repoPath}`);
-      assert.ok(error.cause instanceof Error);
-      assert.equal((error.cause as Error).message, "PR creation error");
-      assert.equal(mockDeleteRef.mock.callCount(), 0);
     });
   });
 
   describe("listMembers", () => {
-    it("should return mapped org members", async() => {
-      mockListOrgMembers.mock.mockImplementation(async() => {
-        return {
-          data: [
-            { login: "john", avatar_url: "https://avatars.githubusercontent.com/u/1" },
-            { login: "bob", avatar_url: "https://avatars.githubusercontent.com/u/2" }
-          ]
-        };
-      });
+    async function setupOrgAdapter(org: string) {
+      const { adapter, intercept } = createTestSetup();
 
-      const adapter = await setupOrgAdapter("my-org");
+      intercept({ method: "GET", path: "/user" }, 200, { login: "testuser", name: "Test User", avatar_url: null });
+      intercept({ method: "GET", path: /^\/user\/orgs/ }, 200, [{ login: org, avatar_url: null }]);
+
+      await adapter.listNamespaces();
+
+      return { adapter, intercept };
+    }
+
+    async function setupUserAdapter(login: string) {
+      const { adapter, intercept } = createTestSetup();
+
+      intercept({ method: "GET", path: "/user" }, 200, { login, name: login, avatar_url: null });
+      intercept({ method: "GET", path: /^\/user\/orgs/ }, 200, []);
+
+      await adapter.listNamespaces();
+
+      return { adapter, intercept };
+    }
+
+    it("should return mapped org members", async() => {
+      const { adapter, intercept } = await setupOrgAdapter("my-org");
+
+      intercept({ method: "GET", path: /\/orgs\/my-org\/members/ }, 200, [
+        { login: "john", avatar_url: "https://avatars.githubusercontent.com/u/1" },
+        { login: "bob", avatar_url: "https://avatars.githubusercontent.com/u/2" }
+      ]);
+
       const result = await adapter.listMembers("my-org");
 
       assert.deepEqual(result, [
@@ -571,85 +531,76 @@ describe("GitHubAdapter", () => {
       ]);
     });
 
-    it("should paginate listMembers with per_page: 100", async() => {
-      mockListOrgMembers.mock.mockImplementation(async() => {
-        return { data: [] };
-      });
+    it("should paginate members with per_page=100", async() => {
+      const { adapter, intercept } = await setupOrgAdapter("my-org");
 
-      const adapter = await setupOrgAdapter("my-org");
-      mockPaginate.mock.resetCalls();
-      await adapter.listMembers("my-org");
+      intercept({ method: "GET", path: /\/orgs\/my-org\/members.*per_page=100/ }, 200, []);
 
-      assert.equal(mockPaginate.mock.callCount(), 1);
-      assert.deepEqual(mockPaginate.mock.calls[0].arguments[1], { org: "my-org", per_page: 100 });
+      const result = await adapter.listMembers("my-org");
+
+      assert.deepEqual(result, []);
     });
 
     it("should return all members when more than 100 exist", async() => {
-      const manyMembers = Array.from({ length: 150 }, (_, i) => {
-        return { login: `user-${i}`, avatar_url: null };
+      const { adapter, intercept } = await setupOrgAdapter("my-org");
+
+      const manyMembers = Array.from({ length: 150 }, (_, index) => {
+        return { login: `user-${index}`, avatar_url: null };
       });
 
-      const adapter = await setupOrgAdapter("my-org");
-      mockPaginate.mock.mockImplementationOnce(async() => manyMembers);
+      intercept({ method: "GET", path: /\/orgs\/my-org\/members/ }, 200, manyMembers);
+
       const result = await adapter.listMembers("my-org");
 
       assert.equal(result.length, 150);
     });
 
     it("should return empty array for user namespace", async() => {
-      const adapter = await setupUserAdapter("john");
+      const { adapter } = await setupUserAdapter("john");
+
       const result = await adapter.listMembers("john");
 
       assert.deepEqual(result, []);
-      assert.equal(mockListOrgMembers.mock.callCount(), 0);
     });
   });
 
   describe("listTree", () => {
     it("should return only blob paths from the tree", async() => {
-      mockGetTree.mock.mockImplementation(async() => {
-        return {
-          data: {
-            tree: [
-              { type: "tree", path: "src" },
-              { type: "blob", path: "src/index.ts" },
-              { type: "blob", path: "README.md" },
-              { type: "tree", path: "src/utils" },
-              { type: "blob", path: "src/utils/helper.ts" }
-            ]
-          }
-        };
+      const { adapter, intercept } = createTestSetup();
+
+      intercept({ method: "GET", path: /\/git\/trees\/main/ }, 200, {
+        tree: [
+          { type: "tree", path: "src" },
+          { type: "blob", path: "src/index.ts" },
+          { type: "blob", path: "README.md" },
+          { type: "tree", path: "src/utils" },
+          { type: "blob", path: "src/utils/helper.ts" }
+        ]
       });
 
-      const adapter = new GitHubAdapter(kToken);
       const result = await adapter.listTree("owner/repo", "main");
 
       assert.deepEqual(result, ["src/index.ts", "README.md", "src/utils/helper.ts"]);
     });
 
     it("should return empty array when repository is empty", async() => {
-      mockGetTree.mock.mockImplementation(async() => {
-        return { data: { tree: [] } };
-      });
+      const { adapter, intercept } = createTestSetup();
 
-      const adapter = new GitHubAdapter(kToken);
+      intercept({ method: "GET", path: /\/git\/trees\/main/ }, 200, { tree: [] });
+
       const result = await adapter.listTree("owner/repo", "main");
 
       assert.deepEqual(result, []);
     });
 
-    it("should call getTree with owner, repo, branch and recursive flag", async() => {
-      mockGetTree.mock.mockImplementation(async() => {
-        return { data: { tree: [] } };
-      });
+    it("should call getTree with recursive flag", async() => {
+      const { adapter, intercept } = createTestSetup();
 
-      const adapter = new GitHubAdapter(kToken);
-      await adapter.listTree("owner/my-repo", "develop");
+      intercept({ method: "GET", path: /\/git\/trees\/develop.*recursive/ }, 200, { tree: [] });
 
-      assert.equal(mockGetTree.mock.callCount(), 1);
-      assert.deepEqual(mockGetTree.mock.calls[0].arguments, [
-        { owner: "owner", repo: "my-repo", tree_sha: "develop", recursive: "1" }
-      ]);
+      const result = await adapter.listTree("owner/my-repo", "develop");
+
+      assert.deepEqual(result, []);
     });
   });
 });

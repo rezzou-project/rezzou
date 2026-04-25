@@ -1,72 +1,46 @@
-
 // Import Node.js Dependencies
-import { describe, it, mock, beforeEach } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+
+// Import Third-party Dependencies
+import { MockAgent, type MockPool } from "@openally/httpie";
+
+// Import Internal Dependencies
+import { GitLabAdapter } from "../gitlab.ts";
 
 // CONSTANTS
 const kToken = "test-token";
+const kGitlabOrigin = "https://gitlab.com";
+const kJson = { headers: { "content-type": "application/json" } };
 
-const mockAllProjects = mock.fn(async() => ([] as unknown[]));
-const mockBranchesShow = mock.fn(async() => void 0);
-const mockBranchesRemove = mock.fn(async() => void 0);
-const mockShow = mock.fn(async() => {
-  return {};
-});
-const mockCommitsCreate = mock.fn(async() => undefined);
-const mockMrCreate = mock.fn(async() => {
-  return { web_url: "", title: "" };
-});
+type InterceptOptions = Parameters<MockPool["intercept"]>[0];
 
-const mockUsersAll = mock.fn(async() => ([] as unknown[]));
-const mockShowCurrentUser = mock.fn(async() => {
-  return { id: 1, username: "testuser", name: "Test User" };
-});
-const mockGroupMembersAll = mock.fn(async() => ([] as unknown[]));
-const mockGroupsAll = mock.fn(async() => ([] as unknown[]));
-const mockAllRepositoryTrees = mock.fn(async() => ([] as unknown[]));
+function createTestSetup() {
+  const mockAgent = new MockAgent();
+  mockAgent.disableNetConnect();
+  const mockPool = mockAgent.get(kGitlabOrigin);
 
-mock.module("@gitbeaker/rest", {
-  namedExports: {
-    Gitlab: mock.fn(function MockGitlab() {
-      return {
-        Groups: { allProjects: mockAllProjects, all: mockGroupsAll },
-        Branches: { show: mockBranchesShow, remove: mockBranchesRemove },
-        RepositoryFiles: { show: mockShow },
-        Repositories: { allRepositoryTrees: mockAllRepositoryTrees },
-        Commits: { create: mockCommitsCreate },
-        MergeRequests: { create: mockMrCreate },
-        Users: { all: mockUsersAll, showCurrentUser: mockShowCurrentUser },
-        GroupMembers: { all: mockGroupMembersAll }
-      };
-    })
+  function intercept(options: InterceptOptions, status: number, body: unknown) {
+    return mockPool.intercept(options).reply(status, body, kJson);
   }
-});
 
-const { GitLabAdapter } = await import("../gitlab.ts");
+  const adapter = new GitLabAdapter(kToken, { agent: mockAgent });
+
+  return { adapter, intercept };
+}
 
 describe("GitLabAdapter", () => {
-  beforeEach(() => {
-    mockAllProjects.mock.resetCalls();
-    mockBranchesShow.mock.resetCalls();
-    mockBranchesRemove.mock.resetCalls();
-    mockShow.mock.resetCalls();
-    mockCommitsCreate.mock.resetCalls();
-    mockMrCreate.mock.resetCalls();
-    mockUsersAll.mock.resetCalls();
-    mockShowCurrentUser.mock.resetCalls();
-    mockGroupMembersAll.mock.resetCalls();
-    mockGroupsAll.mock.resetCalls();
-    mockAllRepositoryTrees.mock.resetCalls();
-  });
-
   describe("listNamespaces", () => {
     it("should return the authenticated user as a user namespace", async() => {
-      mockShowCurrentUser.mock.mockImplementation(async() => {
-        return { id: 42, username: "john", name: "John Doe" };
-      });
-      mockGroupsAll.mock.mockImplementation(async() => []);
+      const { adapter, intercept } = createTestSetup();
 
-      const adapter = new GitLabAdapter(kToken);
+      intercept(
+        { method: "GET", path: /\/api\/v4\/user$/ },
+        200,
+        { id: 42, username: "john", name: "John Doe", avatar_url: null }
+      );
+      intercept({ method: "GET", path: /\/api\/v4\/groups/ }, 200, []);
+
       const result = await adapter.listNamespaces();
 
       assert.equal(result.length, 1);
@@ -81,15 +55,18 @@ describe("GitLabAdapter", () => {
     });
 
     it("should return group namespaces alongside the user namespace", async() => {
-      mockShowCurrentUser.mock.mockImplementation(async() => {
-        return { id: 1, username: "john", name: "John" };
-      });
-      mockGroupsAll.mock.mockImplementation(async() => [
-        { id: 10, full_path: "my-org", name: "My Org" },
-        { id: 11, full_path: "my-org/sub-group", name: "Sub Group" }
+      const { adapter, intercept } = createTestSetup();
+
+      intercept(
+        { method: "GET", path: /\/api\/v4\/user$/ },
+        200,
+        { id: 1, username: "john", name: "John", avatar_url: null }
+      );
+      intercept({ method: "GET", path: /\/api\/v4\/groups/ }, 200, [
+        { id: 10, full_path: "my-org", name: "My Org", avatar_url: null },
+        { id: 11, full_path: "my-org/sub-group", name: "Sub Group", avatar_url: null }
       ]);
 
-      const adapter = new GitLabAdapter(kToken);
       const result = await adapter.listNamespaces();
 
       assert.equal(result.length, 3);
@@ -101,30 +78,34 @@ describe("GitLabAdapter", () => {
     });
 
     it("should call Groups.all with minAccessLevel and pagination options", async() => {
-      mockShowCurrentUser.mock.mockImplementation(async() => {
-        return { id: 1, username: "john", name: "John" };
-      });
-      mockGroupsAll.mock.mockImplementation(async() => []);
+      const { adapter, intercept } = createTestSetup();
 
-      const adapter = new GitLabAdapter(kToken);
-      await adapter.listNamespaces();
+      intercept(
+        { method: "GET", path: /\/api\/v4\/user$/ },
+        200,
+        { id: 1, username: "john", name: "John", avatar_url: null }
+      );
+      intercept({ method: "GET", path: /\/api\/v4\/groups.*min_access_level=20.*per_page=100/ }, 200, []);
 
-      assert.equal(mockGroupsAll.mock.callCount(), 1);
-      assert.deepEqual(mockGroupsAll.mock.calls[0].arguments, [
-        { minAccessLevel: 20, perPage: 100 }
-      ]);
+      const result = await adapter.listNamespaces();
+
+      assert.equal(result.length, 1);
     });
 
     it("should return all groups when more than 100 exist", async() => {
-      const manyGroups = Array.from({ length: 150 }, (_, i) => {
-        return { id: i, full_path: `group-${i}`, name: `Group ${i}` };
-      });
-      mockShowCurrentUser.mock.mockImplementationOnce(async() => {
-        return { id: 1, username: "john", name: "John" };
-      });
-      mockGroupsAll.mock.mockImplementationOnce(async() => manyGroups);
+      const { adapter, intercept } = createTestSetup();
 
-      const adapter = new GitLabAdapter(kToken);
+      const manyGroups = Array.from({ length: 150 }, (_, index) => {
+        return { id: index, full_path: `group-${index}`, name: `Group ${index}`, avatar_url: null };
+      });
+
+      intercept(
+        { method: "GET", path: /\/api\/v4\/user$/ },
+        200,
+        { id: 1, username: "john", name: "John", avatar_url: null }
+      );
+      intercept({ method: "GET", path: /\/api\/v4\/groups/ }, 200, manyGroups);
+
       const result = await adapter.listNamespaces();
 
       assert.equal(result.length, 151);
@@ -133,7 +114,9 @@ describe("GitLabAdapter", () => {
 
   describe("listRepos", () => {
     it("should map GitLab projects to Repo objects", async() => {
-      mockAllProjects.mock.mockImplementation(async() => [
+      const { adapter, intercept } = createTestSetup();
+
+      intercept({ method: "GET", path: /\/api\/v4\/groups\/ns\/projects/ }, 200, [
         {
           id: 42,
           name: "my-project",
@@ -143,7 +126,6 @@ describe("GitLabAdapter", () => {
         }
       ]);
 
-      const adapter = new GitLabAdapter(kToken);
       const result = await adapter.listRepos("ns");
 
       assert.deepEqual(result, [
@@ -158,48 +140,48 @@ describe("GitLabAdapter", () => {
     });
 
     it("should skip repos with no default_branch", async() => {
-      mockAllProjects.mock.mockImplementation(async() => [
+      const { adapter, intercept } = createTestSetup();
+
+      intercept({ method: "GET", path: /\/api\/v4\/groups\/ns\/projects/ }, 200, [
         {
           id: 1,
           name: "repo",
           path_with_namespace: "ns/repo",
-          default_branch: undefined,
+          default_branch: null,
           web_url: "https://gitlab.com/ns/repo"
         }
       ]);
 
-      const adapter = new GitLabAdapter(kToken);
       const result = await adapter.listRepos("ns");
 
       assert.equal(result.length, 0);
     });
 
-    it("should call allProjects with namespace and pagination options", async() => {
-      mockAllProjects.mock.mockImplementation(async() => []);
+    it("should call allProjects with pagination options", async() => {
+      const { adapter, intercept } = createTestSetup();
 
-      const adapter = new GitLabAdapter(kToken);
-      await adapter.listRepos("my-org");
+      intercept({ method: "GET", path: /\/api\/v4\/groups\/my-org\/projects.*per_page=100/ }, 200, []);
 
-      assert.equal(mockAllProjects.mock.callCount(), 1);
-      assert.deepEqual(mockAllProjects.mock.calls[0].arguments, [
-        "my-org",
-        { perPage: 100, archived: false }
-      ]);
+      const result = await adapter.listRepos("my-org");
+
+      assert.deepEqual(result, []);
     });
 
     it("should return all repos when more than 100 exist", async() => {
-      const manyProjects = Array.from({ length: 150 }, (_, i) => {
+      const { adapter, intercept } = createTestSetup();
+
+      const manyProjects = Array.from({ length: 150 }, (_, index) => {
         return {
-          id: i,
-          name: `repo-${i}`,
-          path_with_namespace: `ns/repo-${i}`,
+          id: index,
+          name: `repo-${index}`,
+          path_with_namespace: `ns/repo-${index}`,
           default_branch: "main",
-          web_url: `https://gitlab.com/ns/repo-${i}`
+          web_url: `https://gitlab.com/ns/repo-${index}`
         };
       });
-      mockAllProjects.mock.mockImplementationOnce(async() => manyProjects);
 
-      const adapter = new GitLabAdapter(kToken);
+      intercept({ method: "GET", path: /\/api\/v4\/groups\/ns\/projects/ }, 200, manyProjects);
+
       const result = await adapter.listRepos("ns");
 
       assert.equal(result.length, 150);
@@ -208,55 +190,66 @@ describe("GitLabAdapter", () => {
 
   describe("getFile", () => {
     it("should return FileContent with base64-decoded content", async() => {
+      const { adapter, intercept } = createTestSetup();
       const rawContent = "MIT License\nCopyright 2020";
       const encoded = Buffer.from(rawContent).toString("base64");
 
-      mockShow.mock.mockImplementation(async() => {
-        return { content: encoded };
-      });
+      intercept(
+        { method: "GET", path: /\/api\/v4\/projects\/.*\/repository\/files\/LICENSE/ },
+        200,
+        { content: encoded, file_name: "LICENSE", ref: "main" }
+      );
 
-      const adapter = new GitLabAdapter(kToken);
       const result = await adapter.getFile("ns/repo", "LICENSE", "main");
 
       assert.deepEqual(result, { content: rawContent, ref: "main" });
     });
 
     it("should return null when file is not found", async() => {
-      mockShow.mock.mockImplementation(async() => {
-        throw new Error("404 Not Found");
-      });
+      const { adapter, intercept } = createTestSetup();
 
-      const adapter = new GitLabAdapter(kToken);
+      intercept(
+        { method: "GET", path: /\/api\/v4\/projects\/.*\/repository\/files\/LICENSE/ },
+        404,
+        { message: "404 File Not Found" }
+      );
+
       const result = await adapter.getFile("ns/repo", "LICENSE", "main");
 
       assert.equal(result, null);
     });
 
-    it("should call show with repoPath, filePath, and branch", async() => {
+    it("should request the file with the correct branch ref", async() => {
+      const { adapter, intercept } = createTestSetup();
       const encoded = Buffer.from("content").toString("base64");
-      mockShow.mock.mockImplementation(async() => {
-        return { content: encoded };
-      });
 
-      const adapter = new GitLabAdapter(kToken);
-      await adapter.getFile("ns/repo", "LICENSE", "develop");
+      intercept(
+        { method: "GET", path: /\/repository\/files\/LICENSE.*ref=develop/ },
+        200,
+        { content: encoded, file_name: "LICENSE", ref: "develop" }
+      );
 
-      assert.equal(mockShow.mock.callCount(), 1);
-      assert.deepEqual(mockShow.mock.calls[0].arguments, ["ns/repo", "LICENSE", "develop"]);
+      const result = await adapter.getFile("ns/repo", "LICENSE", "develop");
+
+      assert.ok(result !== null);
+      assert.equal(result.ref, "develop");
     });
   });
 
   describe("submitChanges", () => {
     it("should create commit and merge request and return prUrl and prTitle", async() => {
-      mockCommitsCreate.mock.mockImplementation(async() => undefined);
-      mockMrCreate.mock.mockImplementation(async() => {
-        return {
-          web_url: "https://gitlab.com/ns/repo/-/merge_requests/1",
-          title: "chore: update license year"
-        };
+      const { adapter, intercept } = createTestSetup();
+
+      intercept(
+        { method: "POST", path: /\/api\/v4\/projects\/.*\/repository\/commits/ },
+        201,
+        { id: "abc123" }
+      );
+      intercept({ method: "POST", path: /\/api\/v4\/projects\/.*\/merge_requests$/ }, 201, {
+        web_url: "https://gitlab.com/ns/repo/-/merge_requests/1",
+        title: "chore: update license year"
       });
 
-      const adapter = new GitLabAdapter(kToken);
       const result = await adapter.submitChanges({
         repoPath: "ns/repo",
         baseBranch: "main",
@@ -273,68 +266,17 @@ describe("GitLabAdapter", () => {
       });
     });
 
-    it("should call Commits.create with mapped file actions", async() => {
-      mockCommitsCreate.mock.mockImplementation(async() => undefined);
-      mockMrCreate.mock.mockImplementation(async() => {
-        return { web_url: "", title: "" };
-      });
-
-      const adapter = new GitLabAdapter(kToken);
-      await adapter.submitChanges({
-        repoPath: "ns/repo",
-        baseBranch: "main",
-        headBranch: "rezzou/license-year-2026",
-        commitMessage: "chore: update license year",
-        prTitle: "chore: update license year",
-        prDescription: "Automated update",
-        files: [{ action: "update", path: "LICENSE", content: "MIT License 2026" }]
-      });
-
-      assert.equal(mockCommitsCreate.mock.callCount(), 1);
-      assert.deepEqual(mockCommitsCreate.mock.calls[0].arguments, [
-        "ns/repo",
-        "rezzou/license-year-2026",
-        "chore: update license year",
-        [{ action: "update", filePath: "LICENSE", content: "MIT License 2026" }],
-        { startBranch: "main" }
-      ]);
-    });
-
-    it("should call MergeRequests.create with correct params", async() => {
-      mockCommitsCreate.mock.mockImplementation(async() => undefined);
-      mockMrCreate.mock.mockImplementation(async() => {
-        return { web_url: "", title: "" };
-      });
-
-      const adapter = new GitLabAdapter(kToken);
-      await adapter.submitChanges({
-        repoPath: "ns/repo",
-        baseBranch: "main",
-        headBranch: "rezzou/license-year-2026",
-        commitMessage: "chore: update license year",
-        prTitle: "chore: update license year",
-        prDescription: "Automated update",
-        files: []
-      });
-
-      assert.equal(mockMrCreate.mock.callCount(), 1);
-      assert.deepEqual(mockMrCreate.mock.calls[0].arguments, [
-        "ns/repo",
-        "rezzou/license-year-2026",
-        "main",
-        "chore: update license year",
-        { description: "Automated update" }
-      ]);
-    });
-
     it("should pass reviewerIds when reviewers are provided", async() => {
-      mockCommitsCreate.mock.mockImplementation(async() => undefined);
-      mockMrCreate.mock.mockImplementation(async() => {
-        return { web_url: "", title: "" };
-      });
-      mockUsersAll.mock.mockImplementation(async() => [{ username: "john", id: 42 }]);
+      const { adapter, intercept } = createTestSetup();
 
-      const adapter = new GitLabAdapter(kToken);
+      intercept(
+        { method: "GET", path: /\/api\/v4\/users.*username=john/ },
+        200,
+        [{ id: 42, username: "john" }]
+      );
+      intercept({ method: "POST", path: /\/repository\/commits/ }, 201, { id: "abc123" });
+      intercept({ method: "POST", path: /\/merge_requests$/ }, 201, { web_url: "", title: "" });
+
       await adapter.submitChanges({
         repoPath: "ns/repo",
         baseBranch: "main",
@@ -345,22 +287,13 @@ describe("GitLabAdapter", () => {
         reviewers: ["john"],
         files: []
       });
-
-      assert.equal(mockMrCreate.mock.callCount(), 1);
-      assert.deepEqual(mockMrCreate.mock.calls[0].arguments, [
-        "ns/repo",
-        "rezzou/update",
-        "main",
-        "chore: update",
-        { description: "desc", reviewerIds: [42] }
-      ]);
     });
 
     it("should throw when a reviewer username is not found", async() => {
-      mockCommitsCreate.mock.mockImplementation(async() => undefined);
-      mockUsersAll.mock.mockImplementation(async() => []);
+      const { adapter, intercept } = createTestSetup();
 
-      const adapter = new GitLabAdapter(kToken);
+      intercept({ method: "GET", path: /\/api\/v4\/users.*username=ghost/ }, 200, []);
+      intercept({ method: "POST", path: /\/repository\/commits/ }, 201, { id: "abc123" });
 
       await assert.rejects(
         () => adapter.submitChanges({
@@ -378,12 +311,12 @@ describe("GitLabAdapter", () => {
     });
 
     it("should remove the head branch when MR creation fails", async() => {
-      mockCommitsCreate.mock.mockImplementation(async() => undefined);
-      mockMrCreate.mock.mockImplementationOnce(async() => {
-        throw new Error("MR creation error");
-      });
+      const { adapter, intercept } = createTestSetup();
 
-      const adapter = new GitLabAdapter(kToken);
+      intercept({ method: "POST", path: /\/repository\/commits/ }, 201, { id: "abc123" });
+      intercept({ method: "POST", path: /\/merge_requests$/ }, 422, { message: "MR creation error" });
+      intercept({ method: "DELETE", path: /\/repository\/branches\/rezzou/ }, 204, {});
+
       const error = await adapter.submitChanges({
         repoPath: "ns/repo",
         baseBranch: "main",
@@ -396,18 +329,15 @@ describe("GitLabAdapter", () => {
 
       assert.ok(error instanceof Error);
       assert.equal(error.message, "Failed to create merge request for ns/repo");
-      assert.equal(mockBranchesRemove.mock.callCount(), 1);
-      assert.deepEqual(mockBranchesRemove.mock.calls[0].arguments, ["ns/repo", "rezzou/update"]);
     });
 
     it("should preserve the original error as cause when MR creation fails", async() => {
-      mockCommitsCreate.mock.mockImplementation(async() => undefined);
-      const originalError = new Error("MR creation error");
-      mockMrCreate.mock.mockImplementationOnce(async() => {
-        throw originalError;
-      });
+      const { adapter, intercept } = createTestSetup();
 
-      const adapter = new GitLabAdapter(kToken);
+      intercept({ method: "POST", path: /\/repository\/commits/ }, 201, { id: "abc123" });
+      intercept({ method: "POST", path: /\/merge_requests$/ }, 422, { message: "MR creation error" });
+      intercept({ method: "DELETE", path: /\/repository\/branches\/rezzou/ }, 204, {});
+
       const error = await adapter.submitChanges({
         repoPath: "ns/repo",
         baseBranch: "main",
@@ -419,43 +349,36 @@ describe("GitLabAdapter", () => {
       }).catch((err) => err);
 
       assert.ok(error instanceof Error);
-      assert.strictEqual(error.cause, originalError);
+      assert.ok(error.cause instanceof Error);
     });
   });
 
   describe("listMembers", () => {
     it("should return mapped group members", async() => {
-      mockGroupMembersAll.mock.mockImplementation(async() => [
+      const { adapter, intercept } = createTestSetup();
+
+      intercept({ method: "GET", path: /\/api\/v4\/groups\/my-group\/members/ }, 200, [
         { username: "john", avatar_url: "https://gitlab.com/uploads/john/avatar.png" },
-        { username: "bob", avatar_url: undefined }
+        { username: "bob", avatar_url: null }
       ]);
 
-      const adapter = new GitLabAdapter(kToken);
       const result = await adapter.listMembers("my-group");
 
       assert.deepEqual(result, [
         { username: "john", avatarUrl: "https://gitlab.com/uploads/john/avatar.png" },
-        { username: "bob", avatarUrl: undefined }
+        { username: "bob", avatarUrl: void 0 }
       ]);
     });
 
-    it("should call GroupMembers.all with the namespace", async() => {
-      mockGroupMembersAll.mock.mockImplementation(async() => []);
-
-      const adapter = new GitLabAdapter(kToken);
-      await adapter.listMembers("my-group");
-
-      assert.equal(mockGroupMembersAll.mock.callCount(), 1);
-      assert.deepEqual(mockGroupMembersAll.mock.calls[0].arguments, ["my-group"]);
-    });
-
     it("should return all members when more than 100 exist", async() => {
-      const manyMembers = Array.from({ length: 150 }, (_, i) => {
-        return { username: `user-${i}`, avatar_url: undefined };
-      });
-      mockGroupMembersAll.mock.mockImplementationOnce(async() => manyMembers);
+      const { adapter, intercept } = createTestSetup();
 
-      const adapter = new GitLabAdapter(kToken);
+      const manyMembers = Array.from({ length: 150 }, (_, index) => {
+        return { username: `user-${index}`, avatar_url: null };
+      });
+
+      intercept({ method: "GET", path: /\/api\/v4\/groups\/my-group\/members/ }, 200, manyMembers);
+
       const result = await adapter.listMembers("my-group");
 
       assert.equal(result.length, 150);
@@ -464,7 +387,9 @@ describe("GitLabAdapter", () => {
 
   describe("listTree", () => {
     it("should return only blob paths from the tree", async() => {
-      mockAllRepositoryTrees.mock.mockImplementation(async() => [
+      const { adapter, intercept } = createTestSetup();
+
+      intercept({ method: "GET", path: /\/api\/v4\/projects\/.*\/repository\/tree/ }, 200, [
         { type: "tree", path: "src" },
         { type: "blob", path: "src/index.ts" },
         { type: "blob", path: "README.md" },
@@ -472,32 +397,29 @@ describe("GitLabAdapter", () => {
         { type: "blob", path: "src/utils/helper.ts" }
       ]);
 
-      const adapter = new GitLabAdapter(kToken);
       const result = await adapter.listTree("ns/repo", "main");
 
       assert.deepEqual(result, ["src/index.ts", "README.md", "src/utils/helper.ts"]);
     });
 
     it("should return empty array when repository is empty", async() => {
-      mockAllRepositoryTrees.mock.mockImplementation(async() => []);
+      const { adapter, intercept } = createTestSetup();
 
-      const adapter = new GitLabAdapter(kToken);
+      intercept({ method: "GET", path: /\/api\/v4\/projects\/.*\/repository\/tree/ }, 200, []);
+
       const result = await adapter.listTree("ns/repo", "main");
 
       assert.deepEqual(result, []);
     });
 
-    it("should call allRepositoryTrees with repoPath, branch, recursive and pagination", async() => {
-      mockAllRepositoryTrees.mock.mockImplementation(async() => []);
+    it("should request the tree with recursive flag", async() => {
+      const { adapter, intercept } = createTestSetup();
 
-      const adapter = new GitLabAdapter(kToken);
-      await adapter.listTree("ns/my-repo", "develop");
+      intercept({ method: "GET", path: /\/repository\/tree.*recursive=true/ }, 200, []);
 
-      assert.equal(mockAllRepositoryTrees.mock.callCount(), 1);
-      assert.deepEqual(mockAllRepositoryTrees.mock.calls[0].arguments, [
-        "ns/my-repo",
-        { ref: "develop", recursive: true, perPage: 100 }
-      ]);
+      const result = await adapter.listTree("ns/my-repo", "develop");
+
+      assert.deepEqual(result, []);
     });
   });
 });

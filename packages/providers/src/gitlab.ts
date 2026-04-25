@@ -1,3 +1,6 @@
+// Import Node.js Dependencies
+import type { Agent } from "node:http";
+
 // Import Third-party Dependencies
 import { Gitlab } from "@gitbeaker/rest";
 import type { NamespaceType, Namespace, Repo, FileContent, SubmitParams, SubmitResult, Member, RepoStats } from "@rezzou/core";
@@ -6,13 +9,20 @@ import type { NamespaceType, Namespace, Repo, FileContent, SubmitParams, SubmitR
 import { BaseProvider } from "./base.ts";
 import { mapProviderError } from "./errors.ts";
 
+interface GitLabAdapterOptions {
+  agent?: Agent;
+}
+
 export class GitLabAdapter extends BaseProvider {
   readonly provider = "gitlab";
   #client: InstanceType<typeof Gitlab>;
 
-  constructor(token: string) {
+  constructor(token: string, options: GitLabAdapterOptions = {}) {
     super();
-    this.#client = new Gitlab({ token });
+    this.#client = new Gitlab({
+      token,
+      ...options
+    });
   }
 
   async listNamespaces(): Promise<Namespace[]> {

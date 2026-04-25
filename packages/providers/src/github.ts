@@ -15,14 +15,21 @@ const kCreateCommitMutation = `
   }
 `;
 
+interface GitHubAdapterOptions {
+  fetch?: (url: string | URL | Request, options?: RequestInit) => Promise<Response>;
+}
+
 export class GitHubAdapter extends BaseProvider {
   readonly provider = "github";
   #client: InstanceType<typeof Octokit>;
   #namespaces = new Map<string, NamespaceType>();
 
-  constructor(token: string) {
+  constructor(token: string, options: GitHubAdapterOptions = {}) {
     super();
-    this.#client = new Octokit({ auth: token });
+    this.#client = new Octokit({
+      auth: token,
+      ...(options.fetch && { request: { fetch: options.fetch } })
+    });
   }
 
   async listNamespaces(): Promise<Namespace[]> {
