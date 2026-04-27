@@ -14,6 +14,7 @@ export interface GitPluginEntry {
   slug: string;
   url: string;
   ref: string | null;
+  pinnedCommit: string;
   installedAt: string;
 }
 
@@ -101,17 +102,39 @@ export function addGitPluginEntry(entry: GitPluginEntry): void {
 }
 
 function execFileAsync(file: string, args: string[], timeoutMs: number): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    cp.execFile(file, args, { timeout: timeoutMs }, (error) => {
-      if (error) {
-        reject(error);
+  const { promise, resolve, reject } = Promise.withResolvers<void>();
 
-        return;
-      }
+  cp.execFile(file, args, { timeout: timeoutMs }, (error) => {
+    if (error) {
+      reject(error);
 
-      resolve();
-    });
+      return;
+    }
+
+    resolve();
   });
+
+  return promise;
+}
+
+function execFileAsyncOut(file: string, args: string[], timeoutMs: number): Promise<string> {
+  const { promise, resolve, reject } = Promise.withResolvers<string>();
+
+  cp.execFile(file, args, { timeout: timeoutMs }, (error, stdout) => {
+    if (error) {
+      reject(error);
+
+      return;
+    }
+
+    resolve(stdout.trim());
+  });
+
+  return promise;
+}
+
+export async function resolveCommitHash(targetPath: string): Promise<string> {
+  return execFileAsyncOut("git", ["-C", targetPath, "rev-parse", "HEAD"], kGitCloneTimeoutMs);
 }
 
 export async function cloneGitPlugin(

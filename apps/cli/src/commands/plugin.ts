@@ -17,6 +17,7 @@ import {
   gitPluginPath,
   addGitPluginEntry,
   cloneGitPlugin,
+  resolveCommitHash,
   type GitPluginEntry,
   type ParsedGitUrl
 } from "../git-plugin-store.ts";
@@ -43,6 +44,7 @@ export interface PluginStoreOptions {
   gitPluginPath: (slug: string) => string;
   dirExists: (dirPath: string) => boolean;
   gitClone: (cloneUrl: string, targetPath: string, ref: string | null) => Promise<void>;
+  resolveCommitHash: (targetPath: string) => Promise<string>;
   resolveEntry: (dirPath: string) => string | null;
   addGitPluginEntry: (entry: GitPluginEntry) => void;
 }
@@ -58,6 +60,7 @@ const kDefaultStore: PluginStoreOptions = {
   gitPluginPath,
   dirExists: (dirPath) => fs.existsSync(dirPath),
   gitClone: cloneGitPlugin,
+  resolveCommitHash,
   resolveEntry: getSubfolderEntry,
   addGitPluginEntry
 };
@@ -115,6 +118,8 @@ export async function pluginCommand(
         return;
       }
 
+      const pinnedCommit = await store.resolveCommitHash(targetPath);
+
       const entry = store.resolveEntry(targetPath);
       if (!entry) {
         console.error(`Could not resolve plugin entry point in "${targetPath}".`);
@@ -126,6 +131,7 @@ export async function pluginCommand(
         slug: parsed.slug,
         url: target,
         ref: parsed.ref,
+        pinnedCommit,
         installedAt: new Date().toISOString()
       });
       store.addPluginPath(entry);

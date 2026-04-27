@@ -18,6 +18,7 @@ function fakeStore(overrides: Partial<PluginStoreOptions> = {}): PluginStoreOpti
     gitPluginPath: (slug) => `/fake/plugins-git/${slug}`,
     dirExists: () => false,
     gitClone: async() => undefined,
+    resolveCommitHash: async() => "abc1234deadbeef",
     resolveEntry: () => "/fake/entry.ts",
     addGitPluginEntry: () => undefined,
     ...overrides
@@ -89,6 +90,7 @@ describe("UT pluginCommand", () => {
           clonedUrl = cloneUrl;
           clonedRef = ref;
         },
+        resolveCommitHash: async() => "deadbeef1234",
         resolveEntry: () => "/fake/plugins-git/github.com-example-plugin/index.ts",
         addGitPluginEntry: (entry) => {
           addedEntry = entry;
@@ -104,6 +106,7 @@ describe("UT pluginCommand", () => {
       assert.equal(clonedRef, null);
       assert.equal(addedEntry?.slug, "github.com-example-plugin");
       assert.equal(addedEntry?.url, "https://github.com/example/plugin");
+      assert.equal(addedEntry?.pinnedCommit, "deadbeef1234");
       assert.equal(addedPath, "/fake/plugins-git/github.com-example-plugin/index.ts");
     });
 
