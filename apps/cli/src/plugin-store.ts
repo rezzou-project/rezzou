@@ -21,7 +21,7 @@ export function readPluginPaths(): string[] {
   }
 }
 
-function getSubfolderEntry(dirPath: string): string | null {
+export function getSubfolderEntry(dirPath: string): string | null {
   for (const candidate of ["index.ts", "index.js", "index.mjs"]) {
     const entry = path.join(dirPath, candidate);
     if (fs.existsSync(entry)) {
