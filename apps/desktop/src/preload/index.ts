@@ -127,6 +127,10 @@ contextBridge.exposeInMainWorld("api", {
 
   pickAndLoadPlugin: (): Promise<PluginInfo | null> => ipcRenderer.invoke(IpcChannels.PluginPickAndLoad),
 
+  addPluginFromGit: (url: string, ref?: string): Promise<PluginInfo> => ipcRenderer.invoke(
+    IpcChannels.PluginAddFromGit, { url, ref }
+  ),
+
   getMissingPlugins: (): Promise<string[]> => ipcRenderer.invoke(IpcChannels.PluginGetMissing),
 
   listPlugins: (): Promise<LoadedPluginInfo[]> => ipcRenderer.invoke(IpcChannels.PluginList),
