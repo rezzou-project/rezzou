@@ -32,7 +32,7 @@ mock.module("node:child_process", {
   namedExports: { execFile: fakeExecFile }
 });
 
-const { cloneGitPlugin } = await import("../git-plugin-store.ts");
+const { cloneGitPlugin, fetchGitPlugin } = await import("../git-plugin-store.ts");
 
 after(() => {
   fs.rmSync(kTmpDir, { recursive: true, force: true });
@@ -114,5 +114,75 @@ describe("UT cloneGitPlugin", () => {
 
     const opts = fakeExecFile.mock.calls[0].arguments[2] as { timeout: number; };
     assert.equal(opts.timeout, 60_000);
+  });
+});
+
+describe("UT fetchGitPlugin", () => {
+  it("should fetch and pull without checkout when no ref is provided", async() => {
+    const targetPath = path.join(kTmpDir, "fetch-no-ref");
+    execQueue.push({});
+    execQueue.push({});
+
+    await fetchGitPlugin(targetPath, null);
+
+    assert.equal(fakeExecFile.mock.callCount(), 2);
+    assert.deepEqual(fakeExecFile.mock.calls[0].arguments[1], ["-C", targetPath, "fetch", "--all", "--prune"]);
+    assert.deepEqual(fakeExecFile.mock.calls[1].arguments[1], ["-C", targetPath, "pull", "--ff-only"]);
+  });
+
+  it("should fetch, checkout, and pull when a ref is provided", async() => {
+    const targetPath = path.join(kTmpDir, "fetch-with-ref");
+    execQueue.push({});
+    execQueue.push({});
+    execQueue.push({});
+
+    await fetchGitPlugin(targetPath, "v2.0.0");
+
+    assert.equal(fakeExecFile.mock.callCount(), 3);
+    assert.deepEqual(fakeExecFile.mock.calls[1].arguments[1], ["-C", targetPath, "checkout", "v2.0.0"]);
+    assert.deepEqual(fakeExecFile.mock.calls[2].arguments[1], ["-C", targetPath, "pull", "--ff-only"]);
+  });
+
+  it("should throw when fetch fails", async() => {
+    const targetPath = path.join(kTmpDir, "fetch-fail");
+    execQueue.push({ error: new Error("network unreachable") });
+
+    await assert.rejects(
+      () => fetchGitPlugin(targetPath, null),
+      { message: "failed to fetch git repository" }
+    );
+  });
+
+  it("should throw when checkout fails", async() => {
+    const targetPath = path.join(kTmpDir, "checkout-fail-fetch");
+    execQueue.push({});
+    execQueue.push({ error: new Error("ref not found") });
+
+    await assert.rejects(
+      () => fetchGitPlugin(targetPath, "v99.0.0"),
+      { message: "failed to checkout ref \"v99.0.0\"" }
+    );
+  });
+
+  it("should throw when pull fails", async() => {
+    const targetPath = path.join(kTmpDir, "pull-fail");
+    execQueue.push({});
+    execQueue.push({ error: new Error("not a fast-forward") });
+
+    await assert.rejects(
+      () => fetchGitPlugin(targetPath, null),
+      { message: "failed to pull with --ff-only" }
+    );
+  });
+
+  it("should pass custom timeoutMs to execFile", async() => {
+    const targetPath = path.join(kTmpDir, "fetch-custom-timeout");
+    execQueue.push({});
+    execQueue.push({});
+
+    await fetchGitPlugin(targetPath, null, { timeoutMs: 5_000 });
+
+    const opts = fakeExecFile.mock.calls[0].arguments[2] as { timeout: number; };
+    assert.equal(opts.timeout, 5_000);
   });
 });

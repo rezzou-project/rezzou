@@ -21,6 +21,9 @@ function fakeStore(overrides: Partial<PluginStoreOptions> = {}): PluginStoreOpti
     resolveCommitHash: async() => "abc1234deadbeef",
     resolveEntry: () => "/fake/entry.ts",
     addGitPluginEntry: () => undefined,
+    readGitPlugins: () => [],
+    fetchGitPlugin: async() => undefined,
+    confirm: async() => true,
     ...overrides
   };
 }
@@ -251,6 +254,137 @@ describe("UT pluginCommand", () => {
       await pluginCommand(["remove"], store);
 
       assert.equal(called, false);
+    });
+  });
+
+  describe("update", () => {
+    const kFakeEntry: GitPluginEntry = {
+      slug: "github.com-example-plugin",
+      url: "https://github.com/example/plugin",
+      ref: "v1.0.0",
+      pinnedCommit: "aaaaaaaabbbbbbbb",
+      installedAt: "2024-01-01T00:00:00.000Z"
+    };
+
+    it("should update the plugin and write new pinnedCommit when hash changes and user confirms", async() => {
+      let updatedEntry: GitPluginEntry | undefined;
+
+      const store = fakeStore({
+        readGitPlugins: () => [kFakeEntry],
+        dirExists: () => true,
+        fetchGitPlugin: async() => undefined,
+        resolveCommitHash: async() => "ccccccccdddddddd",
+        confirm: async() => true,
+        addGitPluginEntry: (entry) => {
+          updatedEntry = entry;
+        }
+      });
+
+      await pluginCommand(["update", "github.com-example-plugin"], store);
+
+      assert.equal(updatedEntry?.pinnedCommit, "ccccccccdddddddd");
+      assert.equal(updatedEntry?.slug, kFakeEntry.slug);
+    });
+
+    it("should not update when user declines confirmation", async() => {
+      let addCalled = false;
+
+      const store = fakeStore({
+        readGitPlugins: () => [kFakeEntry],
+        dirExists: () => true,
+        fetchGitPlugin: async() => undefined,
+        resolveCommitHash: async() => "ccccccccdddddddd",
+        confirm: async() => false,
+        addGitPluginEntry: () => {
+          addCalled = true;
+        }
+      });
+
+      await pluginCommand(["update", "github.com-example-plugin"], store);
+
+      assert.equal(addCalled, false);
+    });
+
+    it("should report up to date when hash is unchanged", async() => {
+      let addCalled = false;
+
+      const store = fakeStore({
+        readGitPlugins: () => [kFakeEntry],
+        dirExists: () => true,
+        fetchGitPlugin: async() => undefined,
+        resolveCommitHash: async() => kFakeEntry.pinnedCommit,
+        addGitPluginEntry: () => {
+          addCalled = true;
+        }
+      });
+
+      await pluginCommand(["update", "github.com-example-plugin"], store);
+
+      assert.equal(addCalled, false);
+    });
+
+    it("should show error when plugin id is not found in git plugins", async() => {
+      let fetchCalled = false;
+
+      const store = fakeStore({
+        readGitPlugins: () => [],
+        fetchGitPlugin: async() => {
+          fetchCalled = true;
+        }
+      });
+
+      await pluginCommand(["update", "unknown-plugin"], store);
+
+      assert.equal(fetchCalled, false);
+    });
+
+    it("should show error when plugin directory does not exist", async() => {
+      let fetchCalled = false;
+
+      const store = fakeStore({
+        readGitPlugins: () => [kFakeEntry],
+        dirExists: () => false,
+        fetchGitPlugin: async() => {
+          fetchCalled = true;
+        }
+      });
+
+      await pluginCommand(["update", "github.com-example-plugin"], store);
+
+      assert.equal(fetchCalled, false);
+    });
+
+    it("should show error when fetch fails", async() => {
+      let addCalled = false;
+
+      const store = fakeStore({
+        readGitPlugins: () => [kFakeEntry],
+        dirExists: () => true,
+        fetchGitPlugin: async() => {
+          throw new Error("failed to fetch git repository");
+        },
+        addGitPluginEntry: () => {
+          addCalled = true;
+        }
+      });
+
+      await pluginCommand(["update", "github.com-example-plugin"], store);
+
+      assert.equal(addCalled, false);
+    });
+
+    it("should show usage when id argument is missing", async() => {
+      let fetchCalled = false;
+
+      const store = fakeStore({
+        fetchGitPlugin: async() => {
+          fetchCalled = true;
+        }
+      });
+
+      await pluginCommand(["update"], store);
+
+      assert.equal(fetchCalled, false);
     });
   });
 

@@ -3,6 +3,9 @@ import * as path from "node:path";
 import * as fs from "node:fs";
 import { parseArgs } from "node:util";
 
+// Import Third-party Dependencies
+import { confirm } from "@topcli/prompts";
+
 // Import Internal Dependencies
 import {
   readPluginPaths,
@@ -16,9 +19,12 @@ import {
   parseGitUrl,
   gitPluginPath,
   addGitPluginEntry,
+  readGitPlugins,
   cloneGitPlugin,
+  fetchGitPlugin,
   resolveCommitHash,
   type CloneOptions,
+  type FetchOptions,
   type GitPluginEntry,
   type ParsedGitUrl
 } from "../git-plugin-store.ts";
@@ -30,6 +36,7 @@ Subcommands:
   add <path|url>  Add a plugin by file path or git URL
   list            List all loaded plugins
   remove <path>   Remove a plugin by file path
+  update <id>     Update a git-installed plugin to the latest commit
 
 Options:
   -h, --help   Show this help message`;
@@ -48,6 +55,9 @@ export interface PluginStoreOptions {
   resolveCommitHash: (targetPath: string) => Promise<string>;
   resolveEntry: (dirPath: string) => string | null;
   addGitPluginEntry: (entry: GitPluginEntry) => void;
+  readGitPlugins: () => GitPluginEntry[];
+  fetchGitPlugin: (targetPath: string, ref: string | null, options?: FetchOptions) => Promise<void>;
+  confirm: (message: string) => Promise<boolean>;
 }
 
 const kDefaultStore: PluginStoreOptions = {
@@ -63,7 +73,10 @@ const kDefaultStore: PluginStoreOptions = {
   gitClone: cloneGitPlugin,
   resolveCommitHash,
   resolveEntry: getSubfolderEntry,
-  addGitPluginEntry
+  addGitPluginEntry,
+  readGitPlugins,
+  fetchGitPlugin,
+  confirm: async(message) => confirm(message, { initial: false })
 };
 
 export async function pluginCommand(
@@ -201,6 +214,60 @@ export async function pluginCommand(
     const resolved = path.resolve(filePath);
     store.removePluginPath(resolved);
     console.log(`Plugin removed: ${resolved}`);
+
+    return;
+  }
+
+  if (subcommand === "update") {
+    const [id] = rest;
+    if (!id) {
+      console.log(kUsage);
+
+      return;
+    }
+
+    const entries = store.readGitPlugins();
+    const entry = entries.find((gitEntry) => gitEntry.slug === id);
+    if (!entry) {
+      console.error(`Plugin "${id}" is not a git-installed plugin.`);
+
+      return;
+    }
+
+    const targetPath = store.gitPluginPath(entry.slug);
+    if (!store.dirExists(targetPath)) {
+      console.error(`Plugin directory not found: ${targetPath}`);
+
+      return;
+    }
+
+    try {
+      await store.fetchGitPlugin(targetPath, entry.ref);
+    }
+    catch (error) {
+      console.error(`Update failed: ${error instanceof Error ? error.message : String(error)}`);
+
+      return;
+    }
+
+    const newCommit = await store.resolveCommitHash(targetPath);
+
+    if (newCommit === entry.pinnedCommit) {
+      console.log(`Plugin "${id}" is already up to date (${newCommit.slice(0, 8)}).`);
+
+      return;
+    }
+
+    console.warn(`Plugin updated from \`${entry.pinnedCommit.slice(0, 8)}\` to \`${newCommit.slice(0, 8)}\`.`);
+    const confirmed = await store.confirm("Apply this update?");
+    if (!confirmed) {
+      console.log("Update cancelled.");
+
+      return;
+    }
+
+    store.addGitPluginEntry({ ...entry, pinnedCommit: newCommit });
+    console.log(`Plugin "${id}" updated to ${newCommit.slice(0, 8)}.`);
 
     return;
   }
