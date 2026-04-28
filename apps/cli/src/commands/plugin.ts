@@ -121,7 +121,16 @@ export async function pluginCommand(
 
       const pinnedCommit = await store.resolveCommitHash(targetPath);
 
-      const entry = store.resolveEntry(targetPath);
+      let entry: string | null;
+      try {
+        entry = store.resolveEntry(targetPath);
+      }
+      catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`Could not resolve plugin entry point in "${targetPath}": ${message}`);
+
+        return;
+      }
       if (!entry) {
         console.error(`Could not resolve plugin entry point in "${targetPath}".`);
 
