@@ -20,27 +20,46 @@ export function readPluginPaths(): string[] {
   }
 }
 
-function getSubfolderEntry(dirPath: string): string | null {
-  for (const candidate of ["index.ts", "index.js", "index.mjs"]) {
-    const entry = path.join(dirPath, candidate);
-    if (fs.existsSync(entry)) {
-      return entry;
-    }
-  }
+interface PackageJson {
+  main?: string;
+  rezzou?: {
+    entry?: string;
+  };
+}
+
+export function getSubfolderEntry(dirPath: string): string | null {
   const pkgFile = path.join(dirPath, "package.json");
-  if (!fs.existsSync(pkgFile)) {
-    return null;
-  }
-  try {
-    const pkg = JSON.parse(fs.readFileSync(pkgFile, "utf-8")) as { main?: string; };
+
+  if (fs.existsSync(pkgFile)) {
+    let pkg: PackageJson;
+    try {
+      pkg = JSON.parse(fs.readFileSync(pkgFile, "utf-8")) as PackageJson;
+    }
+    catch {
+      return null;
+    }
+
+    const rezzouEntry = pkg.rezzou?.entry;
+    if (rezzouEntry) {
+      const entry = path.join(dirPath, rezzouEntry);
+
+      return fs.existsSync(entry) ? entry : null;
+    }
+
     if (pkg.main) {
       const entry = path.join(dirPath, pkg.main);
 
       return fs.existsSync(entry) ? entry : null;
     }
+
+    throw new Error(`Plugin at "${dirPath}" has a package.json but no "main" or "rezzou.entry" field`);
   }
-  catch {
-    // skip unparseable package.json
+
+  for (const candidate of ["index.ts", "index.mjs", "index.js"]) {
+    const entry = path.join(dirPath, candidate);
+    if (fs.existsSync(entry)) {
+      return entry;
+    }
   }
 
   return null;
@@ -60,7 +79,15 @@ export function scanPluginsDir(): string[] {
     }
 
     if (stat.isDirectory()) {
-      const entry = getSubfolderEntry(fullPath);
+      let entry: string | null;
+      try {
+        entry = getSubfolderEntry(fullPath);
+      }
+      catch (error) {
+        console.warn(`Warning: ${error instanceof Error ? error.message : String(error)}`);
+
+        return [];
+      }
 
       return entry === null ? [] : entry;
     }
