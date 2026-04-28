@@ -137,15 +137,22 @@ export async function resolveCommitHash(targetPath: string): Promise<string> {
   return execFileAsyncOut("git", ["-C", targetPath, "rev-parse", "HEAD"], kGitCloneTimeoutMs);
 }
 
+export interface CloneOptions {
+  ref: string | null;
+  timeoutMs?: number;
+}
+
 export async function cloneGitPlugin(
   cloneUrl: string,
   targetPath: string,
-  ref: string | null
+  options: CloneOptions
 ): Promise<void> {
+  const { ref, timeoutMs = kGitCloneTimeoutMs } = options;
+
   fs.mkdirSync(path.dirname(targetPath), { recursive: true });
 
   try {
-    await execFileAsync("git", ["clone", cloneUrl, targetPath], kGitCloneTimeoutMs);
+    await execFileAsync("git", ["clone", cloneUrl, targetPath], timeoutMs);
   }
   catch (error) {
     try {
@@ -163,7 +170,7 @@ export async function cloneGitPlugin(
   }
 
   try {
-    await execFileAsync("git", ["-C", targetPath, "checkout", ref], kGitCloneTimeoutMs);
+    await execFileAsync("git", ["-C", targetPath, "checkout", ref], timeoutMs);
   }
   catch (error) {
     try {
