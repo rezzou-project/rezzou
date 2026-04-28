@@ -18,6 +18,7 @@ import {
   addGitPluginEntry,
   cloneGitPlugin,
   resolveCommitHash,
+  type CloneOptions,
   type GitPluginEntry,
   type ParsedGitUrl
 } from "../git-plugin-store.ts";
@@ -43,7 +44,7 @@ export interface PluginStoreOptions {
   parseGitUrl: (raw: string) => ParsedGitUrl | null;
   gitPluginPath: (slug: string) => string;
   dirExists: (dirPath: string) => boolean;
-  gitClone: (cloneUrl: string, targetPath: string, ref: string | null) => Promise<void>;
+  gitClone: (cloneUrl: string, targetPath: string, options: CloneOptions) => Promise<void>;
   resolveCommitHash: (targetPath: string) => Promise<string>;
   resolveEntry: (dirPath: string) => string | null;
   addGitPluginEntry: (entry: GitPluginEntry) => void;
@@ -110,7 +111,7 @@ export async function pluginCommand(
       }
 
       try {
-        await store.gitClone(parsed.cloneUrl, targetPath, parsed.ref);
+        await store.gitClone(parsed.cloneUrl, targetPath, { ref: parsed.ref });
       }
       catch (error) {
         console.error(`Clone failed: ${error instanceof Error ? error.message : String(error)}`);

@@ -86,7 +86,7 @@ describe("UT pluginCommand", () => {
         isGitUrl: () => true,
         parseGitUrl: () => kFakeParsed,
         dirExists: () => false,
-        gitClone: async(cloneUrl, _targetPath, ref) => {
+        gitClone: async(cloneUrl, _targetPath, { ref }) => {
           clonedUrl = cloneUrl;
           clonedRef = ref;
         },
@@ -119,7 +119,7 @@ describe("UT pluginCommand", () => {
           return { ...kFakeParsed, ref: "v1.0.0" };
         },
         dirExists: () => false,
-        gitClone: async(_cloneUrl, _targetPath, ref) => {
+        gitClone: async(_cloneUrl, _targetPath, { ref }) => {
           clonedRef = ref;
         }
       });
