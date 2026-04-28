@@ -142,6 +142,41 @@ export interface CloneOptions {
   timeoutMs?: number;
 }
 
+export interface FetchOptions {
+  timeoutMs?: number;
+}
+
+export async function fetchGitPlugin(
+  targetPath: string,
+  ref: string | null,
+  options: FetchOptions = {}
+): Promise<void> {
+  const { timeoutMs = kGitCloneTimeoutMs } = options;
+
+  try {
+    await execFileAsync("git", ["-C", targetPath, "fetch", "--all", "--prune"], timeoutMs);
+  }
+  catch (error) {
+    throw new Error("failed to fetch git repository", { cause: error });
+  }
+
+  if (ref) {
+    try {
+      await execFileAsync("git", ["-C", targetPath, "checkout", ref], timeoutMs);
+    }
+    catch (error) {
+      throw new Error(`failed to checkout ref "${ref}"`, { cause: error });
+    }
+  }
+
+  try {
+    await execFileAsync("git", ["-C", targetPath, "pull", "--ff-only"], timeoutMs);
+  }
+  catch (error) {
+    throw new Error("failed to pull with --ff-only", { cause: error });
+  }
+}
+
 export async function cloneGitPlugin(
   cloneUrl: string,
   targetPath: string,
