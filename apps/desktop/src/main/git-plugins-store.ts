@@ -24,27 +24,23 @@ export interface ParsedGitUrl {
   slug: string;
 }
 
-export function isGitUrl(raw: string): boolean {
-  return (
-    raw.startsWith("git+https://") ||
-    raw.startsWith("git+ssh://") ||
-    raw.startsWith("git@") ||
-    /^https?:\/\/(github|gitlab)\.com\//.test(raw)
-  );
+export interface CloneOptions {
+  ref: string | null;
+  timeoutMs?: number;
 }
 
 export function parseGitUrl(raw: string): ParsedGitUrl | null {
-  const hashIndex = raw.lastIndexOf("#");
-  const protocolIndex = raw.indexOf("://");
+  const hashIdx = raw.lastIndexOf("#");
+  const protocolIdx = raw.indexOf("://");
 
   let urlPart = raw;
   let ref: string | null = null;
 
-  if (hashIndex !== -1 && hashIndex > protocolIndex) {
-    const candidate = raw.slice(hashIndex + 1);
+  if (hashIdx !== -1 && hashIdx > protocolIdx) {
+    const candidate = raw.slice(hashIdx + 1);
     if (candidate) {
       ref = candidate;
-      urlPart = raw.slice(0, hashIndex);
+      urlPart = raw.slice(0, hashIdx);
     }
   }
 
@@ -88,13 +84,13 @@ export function readGitPlugins(): GitPluginEntry[] {
 
 export function addGitPluginEntry(entry: GitPluginEntry): void {
   const entries = readGitPlugins();
-  const index = entries.findIndex((existingEntry) => existingEntry.slug === entry.slug);
+  const idx = entries.findIndex((existingEntry) => existingEntry.slug === entry.slug);
 
-  if (index === -1) {
+  if (idx === -1) {
     entries.push(entry);
   }
   else {
-    entries[index] = entry;
+    entries[idx] = entry;
   }
 
   fs.mkdirSync(kRezzouDir, { recursive: true });
@@ -137,46 +133,6 @@ export async function resolveCommitHash(targetPath: string): Promise<string> {
   return execFileAsyncOut("git", ["-C", targetPath, "rev-parse", "HEAD"], kGitCloneTimeoutMs);
 }
 
-export interface CloneOptions {
-  ref: string | null;
-  timeoutMs?: number;
-}
-
-export interface FetchOptions {
-  timeoutMs?: number;
-}
-
-export async function fetchGitPlugin(
-  targetPath: string,
-  ref: string | null,
-  options: FetchOptions = {}
-): Promise<void> {
-  const { timeoutMs = kGitCloneTimeoutMs } = options;
-
-  try {
-    await execFileAsync("git", ["-C", targetPath, "fetch", "--all", "--prune"], timeoutMs);
-  }
-  catch (error) {
-    throw new Error("failed to fetch git repository", { cause: error });
-  }
-
-  if (ref) {
-    try {
-      await execFileAsync("git", ["-C", targetPath, "checkout", ref], timeoutMs);
-    }
-    catch (error) {
-      throw new Error(`failed to checkout ref "${ref}"`, { cause: error });
-    }
-  }
-
-  try {
-    await execFileAsync("git", ["-C", targetPath, "pull", "--ff-only"], timeoutMs);
-  }
-  catch (error) {
-    throw new Error("failed to pull with --ff-only", { cause: error });
-  }
-}
-
 export async function cloneGitPlugin(
   cloneUrl: string,
   targetPath: string,
@@ -194,7 +150,7 @@ export async function cloneGitPlugin(
       fs.rmSync(targetPath, { recursive: true, force: true });
     }
     catch {
-      // ignore
+      // ignore cleanup failure
     }
 
     throw new Error("failed to clone git repository", { cause: error });
@@ -212,7 +168,7 @@ export async function cloneGitPlugin(
       fs.rmSync(targetPath, { recursive: true, force: true });
     }
     catch {
-      // ignore
+      // ignore cleanup failure
     }
 
     throw new Error(`failed to checkout ref "${ref}"`, { cause: error });

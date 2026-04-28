@@ -9,6 +9,7 @@ import {
   RezzouError,
   type Repo,
   type RepoDiff,
+  type Provider,
   type ProviderAdapter,
   type Namespace
 } from "@rezzou/core";
@@ -33,7 +34,14 @@ import { listOperations, registry } from "./operation-registry.ts";
 import { filterRegistry } from "./filter-registry.ts";
 import { providerRegistry } from "./provider-registry.ts";
 import { loadPlugin, unregisterPluginByPath } from "./plugin-loader.ts";
-import { readPluginPaths, addPluginPath, removePluginPath, scanPluginsDir } from "./plugins-store.ts";
+import { readPluginPaths, addPluginPath, removePluginPath, scanPluginsDir, getSubfolderEntry } from "./plugins-store.ts";
+import {
+  parseGitUrl,
+  gitPluginPath,
+  addGitPluginEntry,
+  cloneGitPlugin,
+  resolveCommitHash
+} from "./git-plugins-store.ts";
 import { readHistory, recordRun } from "./history-store.ts";
 import { saveCredentials, loadSavedCredentials } from "./credentials-store.ts";
 import {
@@ -49,6 +57,7 @@ import {
   type LoadedPluginInfo,
   type UnloadPluginPayload,
   type ReloadPluginPayload,
+  type AddFromGitPayload,
   type FilterReposPayload,
   type CheckBranchConflictsPayload,
   type RecordRunPayload,
@@ -313,6 +322,65 @@ app.whenReady().then(async() => {
       name: plugin.name,
       version: plugin.version,
       filePath,
+      source: "persisted"
+    });
+    mainWindow?.webContents.send(IpcChannels.RegistryPluginsChanged, [...loadedPlugins.values()]);
+
+    return { id: plugin.id, name: plugin.name, version: plugin.version };
+  });
+
+  ipcMain.handle(IpcChannels.PluginAddFromGit, async(_event, payload: AddFromGitPayload): Promise<PluginInfo> => {
+    const { url, ref } = payload;
+
+    const parsed = parseGitUrl(url);
+    if (!parsed) {
+      throw new Error(`Invalid git URL: ${url}`);
+    }
+
+    const effectiveRef = ref ?? parsed.ref;
+    const targetPath = gitPluginPath(parsed.slug);
+
+    if (fs.existsSync(targetPath)) {
+      throw new Error(`Plugin "${parsed.slug}" is already installed`);
+    }
+
+    await cloneGitPlugin(parsed.cloneUrl, targetPath, { ref: effectiveRef ?? null });
+
+    const pinnedCommit = await resolveCommitHash(targetPath);
+
+    let entry: string | null;
+    try {
+      entry = getSubfolderEntry(targetPath);
+    }
+    catch (error) {
+      fs.rmSync(targetPath, { recursive: true, force: true });
+      throw new Error("failed to resolve plugin entry point", { cause: error });
+    }
+
+    if (!entry) {
+      fs.rmSync(targetPath, { recursive: true, force: true });
+      throw new Error(`Could not resolve plugin entry point in "${targetPath}"`);
+    }
+
+    const plugin = await loadPlugin(entry).catch((loadError: unknown) => {
+      fs.rmSync(targetPath, { recursive: true, force: true });
+      throw loadError;
+    });
+
+    addGitPluginEntry({
+      slug: parsed.slug,
+      url,
+      ref: effectiveRef ?? null,
+      pinnedCommit,
+      installedAt: new Date().toISOString()
+    });
+    addPluginPath(entry);
+
+    loadedPlugins.set(entry, {
+      id: plugin.id,
+      name: plugin.name,
+      version: plugin.version,
+      filePath: entry,
       source: "persisted"
     });
     mainWindow?.webContents.send(IpcChannels.RegistryPluginsChanged, [...loadedPlugins.values()]);

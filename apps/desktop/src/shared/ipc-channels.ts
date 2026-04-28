@@ -37,6 +37,7 @@ export const IpcChannels = {
   // Plugin
   PluginLoad: "plugin:load",
   PluginPickAndLoad: "plugin:pick-and-load",
+  PluginAddFromGit: "plugin:addFromGit",
   PluginGetMissing: "plugin:getMissing",
   PluginList: "plugin:list",
   PluginUnload: "plugin:unload",
@@ -107,6 +108,11 @@ export interface UnloadPluginPayload {
 
 export interface ReloadPluginPayload {
   filePath: string;
+}
+
+export interface AddFromGitPayload {
+  url: string;
+  ref?: string;
 }
 
 export interface FilterReposPayload {
@@ -207,6 +213,7 @@ export interface IpcApi {
   onOperationsChanged(callback: (ops: OperationInfo[]) => void): () => void;
   loadPlugin(filePath: string): Promise<PluginInfo>;
   pickAndLoadPlugin(): Promise<PluginInfo | null>;
+  addPluginFromGit(url: string, ref?: string): Promise<PluginInfo>;
   getMissingPlugins(): Promise<string[]>;
   listPlugins(): Promise<LoadedPluginInfo[]>;
   unloadPlugin(filePath: string): Promise<void>;
