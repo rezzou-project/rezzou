@@ -1,6 +1,6 @@
 {
   "name": "@rezzou/cli",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "CLI for Rezzou. Bulk maintenance operations across repositories",
   "author": "Pierre Demailly <pierredemailly.pro@gmail.com>",
   "license": "MIT",
@@ -28,7 +28,7 @@
   },
   "dependencies": {
     "@rezzou/core": "*",
-    "@rezzou/plugins": "^0.1.0",
+    "@rezzou/plugins": "^0.2.0",
     "@rezzou/providers": "*",
     "@rezzou/sdk": "*",
     "@topcli/prompts": "^3.1.0"
