@@ -56,7 +56,7 @@ beforeEach(() => {
 });
 
 function makeCache() {
-  return new CloneCache(kProvider, kTmpDir);
+  return new CloneCache(kProvider, { baseDir: kTmpDir });
 }
 
 function clonePath(repo: Repo) {
@@ -67,11 +67,12 @@ describe("CloneCache", () => {
   describe("ensure", () => {
     it("should clone the repo when not already present", async() => {
       execQueue.push({});
+      execQueue.push({ stdout: "0\t" });
 
       const handle = await makeCache().ensure(kRepo);
 
       assert.equal(handle.path, clonePath(kRepo));
-      assert.equal(fakeExecFile.mock.callCount(), 1);
+      assert.equal(fakeExecFile.mock.callCount(), 2);
 
       const [file, args] = fakeExecFile.mock.calls[0].arguments;
       assert.equal(file, "git");
@@ -81,6 +82,7 @@ describe("CloneCache", () => {
     it("should write a meta entry after cloning", async() => {
       const cache = makeCache();
       execQueue.push({});
+      execQueue.push({ stdout: "0\t" });
 
       await cache.ensure(kRepo);
 
@@ -96,11 +98,12 @@ describe("CloneCache", () => {
       execQueue.push({});
       execQueue.push({});
       execQueue.push({});
+      execQueue.push({ stdout: "0\t" });
 
       const handle = await makeCache().ensure(kRepo);
 
       assert.equal(handle.path, clonePath(kRepo));
-      assert.equal(fakeExecFile.mock.callCount(), 3);
+      assert.equal(fakeExecFile.mock.callCount(), 4);
 
       const calls = fakeExecFile.mock.calls.map((c) => c.arguments[1]);
       assert.deepEqual(calls[0], ["-C", clonePath(kRepo), "fetch", "--all", "--prune"]);
@@ -111,6 +114,7 @@ describe("CloneCache", () => {
     it("should return the same promise for concurrent calls on the same repo", async() => {
       const repo: Repo = { ...kRepo, fullPath: "ns/concurrent-repo", name: "concurrent-repo" };
       execQueue.push({});
+      execQueue.push({ stdout: "0\t" });
 
       const cache = makeCache();
       const p1 = cache.ensure(repo);
@@ -120,7 +124,7 @@ describe("CloneCache", () => {
 
       await p1;
 
-      assert.equal(fakeExecFile.mock.callCount(), 1);
+      assert.equal(fakeExecFile.mock.callCount(), 2);
     });
 
     it("should allow a new ensure after the first one resolves", async() => {
@@ -128,17 +132,18 @@ describe("CloneCache", () => {
       const cache = makeCache();
 
       execQueue.push({});
+      execQueue.push({ stdout: "0\t" });
       await cache.ensure(repo);
 
-      // simulate what git clone would have created on disk
       await fsPromises.mkdir(clonePath(repo), { recursive: true });
 
       execQueue.push({});
       execQueue.push({});
       execQueue.push({});
+      execQueue.push({ stdout: "0\t" });
       await cache.ensure(repo);
 
-      assert.equal(fakeExecFile.mock.callCount(), 4);
+      assert.equal(fakeExecFile.mock.callCount(), 6);
     });
 
     it("should throw and clean up directory when clone fails", async() => {
@@ -169,10 +174,11 @@ describe("CloneCache", () => {
       execQueue.push({});
       execQueue.push({});
       execQueue.push({});
+      execQueue.push({ stdout: "0\t" });
 
       await makeCache().reset(repo);
 
-      assert.equal(fakeExecFile.mock.callCount(), 3);
+      assert.equal(fakeExecFile.mock.callCount(), 4);
 
       const calls = fakeExecFile.mock.calls.map((c) => c.arguments[1]);
       assert.deepEqual(calls[0], ["-C", clonePath(repo), "fetch", "--all", "--prune"]);
@@ -215,6 +221,7 @@ describe("CloneCache", () => {
 
       const cache = makeCache();
       execQueue.push({});
+      execQueue.push({ stdout: "0\t" });
       await cache.ensure(repo);
 
       const beforeEntries = await cache.list();
@@ -236,7 +243,7 @@ describe("CloneCache", () => {
 
   describe("list", () => {
     it("should return an empty array when no clones have been made", async() => {
-      const cache = new CloneCache(kProvider, path.join(kTmpDir, "empty-list"));
+      const cache = new CloneCache(kProvider, { baseDir: path.join(kTmpDir, "empty-list") });
 
       const entries = await cache.list();
 
@@ -247,6 +254,7 @@ describe("CloneCache", () => {
       const repo: Repo = { ...kRepo, fullPath: "ns/list-repo", name: "list-repo" };
       const cache = makeCache();
       execQueue.push({});
+      execQueue.push({ stdout: "0\t" });
 
       await cache.ensure(repo);
 
@@ -256,6 +264,98 @@ describe("CloneCache", () => {
       assert.ok(entry !== undefined);
       assert.ok(entry.lastUsed.match(/^\d{4}-\d{2}-\d{2}T/));
       assert.ok(entry.sizeMb >= 0);
+    });
+  });
+
+  describe("prune", () => {
+    it("should remove TTL-expired clones and update meta", async() => {
+      const baseDir = path.join(kTmpDir, "prune-ttl");
+      const cache = new CloneCache(kProvider, { baseDir, ttlDays: 1 });
+      const repoPath = path.join(baseDir, kProvider, "ns/ttl-repo");
+      await fsPromises.mkdir(repoPath, { recursive: true });
+
+      const metaPath = path.join(baseDir, ".meta.json");
+      const oldDate = new Date(Date.now() - (3 * 24 * 60 * 60 * 1000)).toISOString();
+      await fsPromises.mkdir(baseDir, { recursive: true });
+      await fsPromises.writeFile(metaPath, JSON.stringify({
+        [repoPath]: { lastUsed: oldDate, sizeMb: 10 }
+      }));
+
+      await cache.prune();
+
+      assert.equal(fs.existsSync(repoPath), false);
+      const meta = JSON.parse(await fsPromises.readFile(metaPath, "utf-8"));
+      assert.equal(Object.keys(meta).length, 0);
+    });
+
+    it("should evict LRU clones when total size exceeds cap", async() => {
+      const baseDir = path.join(kTmpDir, "prune-lru");
+      const cache = new CloneCache(kProvider, { baseDir, maxSizeMb: 10, ttlDays: 365 });
+      const oldPath = path.join(baseDir, "old-clone");
+      const newPath = path.join(baseDir, "new-clone");
+
+      await fsPromises.mkdir(oldPath, { recursive: true });
+      await fsPromises.mkdir(newPath, { recursive: true });
+
+      const metaPath = path.join(baseDir, ".meta.json");
+      const oldDate = new Date(Date.now() - (2 * 24 * 60 * 60 * 1000)).toISOString();
+      const newDate = new Date(Date.now() - (1 * 24 * 60 * 60 * 1000)).toISOString();
+      await fsPromises.mkdir(baseDir, { recursive: true });
+      await fsPromises.writeFile(metaPath, JSON.stringify({
+        [oldPath]: { lastUsed: oldDate, sizeMb: 6 },
+        [newPath]: { lastUsed: newDate, sizeMb: 6 }
+      }));
+
+      await cache.prune();
+
+      assert.equal(fs.existsSync(oldPath), false);
+      assert.equal(fs.existsSync(newPath), true);
+
+      const meta = JSON.parse(await fsPromises.readFile(metaPath, "utf-8"));
+      assert.equal(Object.keys(meta).length, 1);
+      assert.ok(newPath in meta);
+    });
+
+    it("should not evict clones within TTL and under cap", async() => {
+      const baseDir = path.join(kTmpDir, "prune-noevict");
+      const cache = new CloneCache(kProvider, { baseDir, maxSizeMb: 100, ttlDays: 30 });
+      const repoPath = path.join(baseDir, "my-clone");
+
+      await fsPromises.mkdir(repoPath, { recursive: true });
+
+      const metaPath = path.join(baseDir, ".meta.json");
+      const recentDate = new Date().toISOString();
+      await fsPromises.mkdir(baseDir, { recursive: true });
+      await fsPromises.writeFile(metaPath, JSON.stringify({
+        [repoPath]: { lastUsed: recentDate, sizeMb: 5 }
+      }));
+
+      await cache.prune();
+
+      assert.equal(fs.existsSync(repoPath), true);
+      const meta = JSON.parse(await fsPromises.readFile(metaPath, "utf-8"));
+      assert.ok(repoPath in meta);
+    });
+
+    it("should be called automatically before ensure", async() => {
+      const baseDir = path.join(kTmpDir, "prune-auto");
+      const cache = new CloneCache(kProvider, { baseDir, ttlDays: 0 });
+
+      const staleRepoPath = path.join(baseDir, "stale-clone");
+      await fsPromises.mkdir(staleRepoPath, { recursive: true });
+
+      const metaPath = path.join(baseDir, ".meta.json");
+      const pastDate = new Date(Date.now() - 1).toISOString();
+      await fsPromises.mkdir(baseDir, { recursive: true });
+      await fsPromises.writeFile(metaPath, JSON.stringify({
+        [staleRepoPath]: { lastUsed: pastDate, sizeMb: 1 }
+      }));
+
+      execQueue.push({});
+      execQueue.push({ stdout: "0\t" });
+      await cache.ensure(kRepo);
+
+      assert.equal(fs.existsSync(staleRepoPath), false);
     });
   });
 });

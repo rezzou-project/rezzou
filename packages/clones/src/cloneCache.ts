@@ -10,6 +10,8 @@ import type { Repo } from "@rezzou/core";
 
 // CONSTANTS
 const kDefaultBaseDir = path.join(os.homedir(), ".rezzou", "clones");
+const kDefaultMaxSizeMb = 5120;
+const kDefaultTtlDays = 30;
 const kGitTimeoutMs = 120_000;
 
 export interface CloneHandle {
@@ -20,6 +22,12 @@ export interface CloneEntry {
   path: string;
   lastUsed: string;
   sizeMb: number;
+}
+
+export interface CloneCacheOptions {
+  baseDir?: string;
+  maxSizeMb?: number;
+  ttlDays?: number;
 }
 
 interface MetaEntry {
@@ -38,6 +46,19 @@ async function execFileAsync(file: string, args: string[]): Promise<void> {
 }
 
 async function getDirSizeMb(dirPath: string): Promise<number> {
+  if (process.platform !== "win32") {
+    const { promise, resolve } = Promise.withResolvers<number>();
+    cp.execFile("du", ["-sk", dirPath], { timeout: kGitTimeoutMs }, (_err, stdout) => {
+      const kb = parseInt((stdout ?? "").trim().split(/\s+/)[0], 10);
+      resolve(Number.isNaN(kb) ? NaN : Math.round((kb / 1024) * 10) / 10);
+    });
+
+    const mbFromDu = await promise;
+    if (!Number.isNaN(mbFromDu)) {
+      return mbFromDu;
+    }
+  }
+
   let totalBytes = 0;
 
   try {
@@ -66,12 +87,16 @@ export class CloneCache {
   readonly #provider: string;
   readonly #baseDir: string;
   readonly #metaFile: string;
+  readonly #maxSizeMb: number;
+  readonly #ttlDays: number;
   readonly #pending = new Map<string, Promise<CloneHandle>>();
 
-  constructor(provider: string, baseDir?: string) {
+  constructor(provider: string, options?: CloneCacheOptions) {
     this.#provider = provider;
-    this.#baseDir = baseDir ?? kDefaultBaseDir;
+    this.#baseDir = options?.baseDir ?? kDefaultBaseDir;
     this.#metaFile = path.join(this.#baseDir, ".meta.json");
+    this.#maxSizeMb = options?.maxSizeMb ?? kDefaultMaxSizeMb;
+    this.#ttlDays = options?.ttlDays ?? kDefaultTtlDays;
   }
 
   #clonePath(repo: Repo): string {
@@ -100,7 +125,47 @@ export class CloneCache {
     await this.#writeMeta(meta);
   }
 
+  async prune(): Promise<void> {
+    const meta = await this.#readMeta();
+    const now = Date.now();
+    const ttlMs = this.#ttlDays * 24 * 60 * 60 * 1000;
+    let changed = false;
+
+    for (const [clonePath, entry] of Object.entries(meta)) {
+      const age = now - new Date(entry.lastUsed).getTime();
+      if (age > ttlMs) {
+        await fs.rm(clonePath, { recursive: true, force: true });
+        delete meta[clonePath];
+        changed = true;
+      }
+    }
+
+    const remaining = Object.entries(meta);
+    const totalMb = remaining.reduce((sum, [, e]) => sum + e.sizeMb, 0);
+
+    if (totalMb > this.#maxSizeMb) {
+      remaining.sort(([, a], [, b]) => new Date(a.lastUsed).getTime() - new Date(b.lastUsed).getTime());
+
+      let currentMb = totalMb;
+      for (const [clonePath, entry] of remaining) {
+        if (currentMb <= this.#maxSizeMb) {
+          break;
+        }
+        await fs.rm(clonePath, { recursive: true, force: true });
+        currentMb -= entry.sizeMb;
+        delete meta[clonePath];
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      await this.#writeMeta(meta);
+    }
+  }
+
   async #doEnsure(repo: Repo): Promise<CloneHandle> {
+    await this.prune();
+
     const clonePath = this.#clonePath(repo);
 
     let cloneExists: boolean;
